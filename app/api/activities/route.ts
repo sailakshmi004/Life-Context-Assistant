@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { activityRepository } from "@/lib/supabase/activities";
 import { validateCreateActivityInput } from "@/lib/validations/activity";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/activities
  * Fetches all activities, supporting optional filtering by status and category.

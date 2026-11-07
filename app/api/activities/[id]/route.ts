@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { activityRepository } from "@/lib/supabase/activities";
 import { validateUpdateActivityInput } from "@/lib/validations/activity";
 
+export const dynamic = "force-dynamic";
+
 interface RouteParams {
   params: {
     id: string;
