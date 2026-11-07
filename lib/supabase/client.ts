@@ -1,30 +1,48 @@
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+
 /**
- * Supabase Browser Client Placeholder (Phase 1)
- *
- * This client will be initialized in future phases once Supabase credentials
- * are configured in .env.local.
- *
- * For now, this module serves as an architectural placeholder so future phases
- * can import a standardized database client without refactoring component imports.
+ * Checks whether Supabase environment variables have been configured
+ * with non-default, real values.
  */
-
-export interface SupabaseConfig {
-  supabaseUrl?: string;
-  supabaseAnonKey?: string;
-}
-
-export function getSupabaseBrowserClient() {
+export function isSupabaseConfigured(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !anonKey) {
-    // In Phase 1, Supabase is not yet connected.
-    // Return null or throw in production when auth/db is required.
+  if (!url || !anonKey) return false;
+  if (url.includes("your-project-id") || url.includes("your-project.supabase.co")) return false;
+  if (anonKey === "your-anon-public-key" || anonKey === "your-anon-key-here") return false;
+
+  return true;
+}
+
+let browserClient: SupabaseClient | null = null;
+
+/**
+ * Returns a singleton Supabase browser client.
+ * Safe for use in Client Components.
+ * If credentials are not configured, returns null without throwing.
+ */
+export function getSupabaseBrowserClient(): SupabaseClient | null {
+  if (typeof window === "undefined") {
+    // In server environment, use getSupabaseServerClient instead
     return null;
   }
 
-  // Future phase implementation:
-  // import { createBrowserClient } from '@supabase/ssr';
-  // return createBrowserClient(url, anonKey);
-  return null;
+  if (browserClient) return browserClient;
+
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  browserClient = createClient(url, anonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
+
+  return browserClient;
 }

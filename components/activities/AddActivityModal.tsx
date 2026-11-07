@@ -38,9 +38,11 @@ export function AddActivityModal({
       durationMinutes: Number(durationMinutes) || 60,
       location: location.trim() || undefined,
       contextRule,
+      monitoringEnabled: contextRule === "weather_rain",
       status: "pending",
       weatherAlertTriggered: contextRule === "weather_rain",
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     onAddActivity(newActivity);

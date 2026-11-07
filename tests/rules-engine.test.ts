@@ -16,8 +16,10 @@ export function runSampleRuleTest() {
     startTime: "2:00 PM",
     durationMinutes: 120,
     contextRule: "weather_rain",
+    monitoringEnabled: true,
     status: "pending",
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   const rainyWeather: WeatherSummary = {

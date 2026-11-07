@@ -13,18 +13,80 @@ export type ActivityStatus = "pending" | "in_progress" | "completed" | "cancelle
 
 export type ContextRuleType = "weather_rain" | "weather_heat" | "weather_wind" | "none";
 
+/**
+ * Database representation of the `activities` table row (PostgreSQL / Supabase)
+ */
+export interface ActivityRow {
+  id: string;
+  title: string;
+  description: string | null;
+  category: ActivityCategory;
+  start_time: string; // ISO 8601 timestamptz
+  duration_minutes: number;
+  monitoring_enabled: boolean;
+  status: ActivityStatus;
+  created_at: string; // ISO 8601 timestamptz
+  updated_at: string; // ISO 8601 timestamptz
+}
+
+/**
+ * Application / Client representation of an Activity.
+ * Supports camelCase properties with optional backward-compatible aliases.
+ */
 export interface Activity {
   id: string;
   title: string;
-  description?: string;
+  description?: string | null;
   category: ActivityCategory;
-  startTime: string; // e.g. "14:00" or ISO timestamp
-  durationMinutes: number; // e.g. 120
-  location?: string;
-  contextRule: ContextRuleType;
+  startTime: string; // e.g. ISO string or formatted time
+  durationMinutes: number;
+  monitoringEnabled?: boolean;
   status: ActivityStatus;
-  weatherAlertTriggered?: boolean;
   createdAt: string;
+  updatedAt?: string;
+
+  // Optional context-rule metadata for Phase 1/Phase 4 weather preview
+  contextRule?: ContextRuleType;
+  weatherAlertTriggered?: boolean;
+  location?: string;
+}
+
+/**
+ * Input payload for creating a new activity
+ */
+export interface CreateActivityInput {
+  title: string;
+  description?: string | null;
+  category: ActivityCategory;
+  startTime: string;
+  durationMinutes: number;
+  monitoringEnabled?: boolean;
+  status?: ActivityStatus;
+}
+
+/**
+ * Input payload for partially updating an existing activity
+ */
+export interface UpdateActivityInput {
+  title?: string;
+  description?: string | null;
+  category?: ActivityCategory;
+  startTime?: string;
+  durationMinutes?: number;
+  monitoringEnabled?: boolean;
+  status?: ActivityStatus;
+}
+
+export type ActivityValidationErrors = Partial<
+  Record<keyof CreateActivityInput, string>
+>;
+
+export interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  errors?: Record<string, string>;
+  message?: string;
 }
 
 export interface WeatherSummary {

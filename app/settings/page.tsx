@@ -25,22 +25,21 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4 text-brand-600" />
-                <CardTitle>Database & Auth (Supabase)</CardTitle>
+                <CardTitle>Database (Supabase PostgreSQL)</CardTitle>
               </div>
-              <Badge variant="warning">Phase 2 Planned</Badge>
+              <Badge variant="success">Phase 2 Implemented</Badge>
             </div>
             <CardDescription>
-              PostgreSQL schema and user authentication
+              PostgreSQL schema, Route Handlers, and client utilities
             </CardDescription>
           </CardHeader>
           <div className="space-y-2 text-xs text-slate-600">
             <p>
-              Status: <span className="font-semibold text-slate-800">Scaffolded</span>
+              Status: <span className="font-semibold text-slate-800">Ready & Connected</span>
             </p>
-            <p>Client stub: <code className="rounded bg-slate-100 px-1 py-0.5">lib/supabase/client.ts</code></p>
-            <p className="text-slate-500">
-              Environment variables defined in <code className="rounded bg-slate-100 px-1 py-0.5">.env.example</code>.
-            </p>
+            <p>Client: <code className="rounded bg-slate-100 px-1 py-0.5">lib/supabase/client.ts</code></p>
+            <p>Server: <code className="rounded bg-slate-100 px-1 py-0.5">lib/supabase/server.ts</code></p>
+            <p>Schema: <code className="rounded bg-slate-100 px-1 py-0.5">supabase/schema.sql</code></p>
           </div>
         </Card>
 
