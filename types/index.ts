@@ -89,9 +89,35 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
+export interface HourlyForecast {
+  time: string; // e.g. "2026-11-13 14:00"
+  timeEpoch: number;
+  tempC: number;
+  condition: string;
+  conditionIcon?: string;
+  chanceOfRain: number; // 0 - 100
+  precipMm: number;
+  humidity: number;
+  windSpeedKmh: number;
+  feelsLikeC: number;
+}
+
+export interface DailyForecast {
+  date: string;
+  maxTempC: number;
+  minTempC: number;
+  chanceOfRain: number;
+  condition: string;
+  conditionIcon?: string;
+  hours: HourlyForecast[];
+}
+
 export interface WeatherSummary {
   location: string;
-  condition: "Sunny" | "Partly Cloudy" | "Cloudy" | "Rainy" | "Thunderstorm";
+  region?: string;
+  country?: string;
+  condition: string;
+  conditionIcon?: string;
   temperatureC: number;
   feelsLikeC: number;
   precipitationProbability: number; // 0 - 100%
@@ -99,6 +125,16 @@ export interface WeatherSummary {
   windSpeedKmh: number;
   updatedAt: string;
   forecastNote?: string;
+}
+
+export interface WeatherContextData {
+  location: string;
+  region: string;
+  country: string;
+  current: WeatherSummary;
+  forecast: DailyForecast[];
+  isLive: boolean;
+  cachedAt: string;
 }
 
 export interface Reminder {

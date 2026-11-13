@@ -9,7 +9,7 @@ import { UpcomingReminders } from "./UpcomingReminders";
 import { ActivityFormModal } from "@/components/activities/ActivityFormModal";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { mockWeather, mockReminders } from "@/lib/mock-data";
-import { evaluateWeatherRule } from "@/lib/rules/engine";
+import { evaluateActivityAgainstForecast } from "@/lib/rules/engine";
 import {
   Activity,
   ActivityStatus,
@@ -17,8 +17,9 @@ import {
   CreateActivityInput,
   Reminder,
   UpdateActivityInput,
+  WeatherContextData,
 } from "@/types";
-import { Database, AlertCircle, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Database, AlertCircle, RefreshCw, CloudSun } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 export function DashboardView() {
@@ -28,6 +29,11 @@ export function DashboardView() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLiveSupabase, setIsLiveSupabase] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Weather State
+  const [selectedLocation, setSelectedLocation] = useState<string>("Hyderabad");
+  const [weatherData, setWeatherData] = useState<WeatherContextData | null>(null);
+  const [isWeatherLoading, setIsWeatherLoading] = useState(false);
 
   // Modal States
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -39,7 +45,23 @@ export function DashboardView() {
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Fetch activities from Next.js Route Handler
+  // 1. Fetch Weather from API
+  const fetchWeather = useCallback(async (loc: string) => {
+    setIsWeatherLoading(true);
+    try {
+      const res = await fetch(`/api/weather?location=${encodeURIComponent(loc)}`);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setWeatherData(json.data);
+      }
+    } catch (err: unknown) {
+      console.error("[DashboardView.fetchWeather] Error:", err);
+    } finally {
+      setIsWeatherLoading(false);
+    }
+  }, []);
+
+  // 2. Fetch activities from Next.js Route Handler
   const fetchActivities = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -51,22 +73,6 @@ export function DashboardView() {
       }
       setActivities(json.data || []);
       setIsLiveSupabase(Boolean(json.isLiveSupabase));
-
-      // Re-evaluate context rules on fetched activities
-      const newAlerts: AttentionAlert[] = [];
-      const fetched: Activity[] = json.data || [];
-      fetched.forEach((act) => {
-        if (act.status !== "completed" && act.status !== "cancelled") {
-          const evalResult = evaluateWeatherRule(act, mockWeather);
-          if (evalResult.shouldAlert && evalResult.alert) {
-            newAlerts.push({
-              id: `alert-${act.id}`,
-              ...evalResult.alert,
-            });
-          }
-        }
-      });
-      setAlerts(newAlerts);
     } catch (err: unknown) {
       console.error("[DashboardView.fetchActivities] Error:", err);
       setError(err instanceof Error ? err.message : "Failed to load activities");
@@ -75,9 +81,36 @@ export function DashboardView() {
     }
   }, []);
 
+  // Initial load
   useEffect(() => {
     fetchActivities();
-  }, [fetchActivities]);
+    fetchWeather(selectedLocation);
+  }, [fetchActivities, fetchWeather, selectedLocation]);
+
+  // Re-evaluate context rules when activities or weather data update
+  useEffect(() => {
+    if (!weatherData) return;
+
+    const newAlerts: AttentionAlert[] = [];
+    activities.forEach((act) => {
+      if (act.status !== "completed" && act.status !== "cancelled") {
+        const evalResult = evaluateActivityAgainstForecast(act, weatherData);
+        if (evalResult.shouldAlert && evalResult.alert) {
+          newAlerts.push({
+            id: `alert-${act.id}`,
+            ...evalResult.alert,
+          });
+        }
+      }
+    });
+    setAlerts(newAlerts);
+  }, [activities, weatherData]);
+
+  // Handle Location Switch
+  const handleLocationChange = (newLoc: string) => {
+    setSelectedLocation(newLoc);
+    fetchWeather(newLoc);
+  };
 
   // Handle Create or Update
   const handleFormSubmit = async (
@@ -173,41 +206,63 @@ export function DashboardView() {
     setAlerts((prev) => prev.filter((a) => a.id !== alertId));
   };
 
+  const activeWeather = weatherData?.current || mockWeather;
+
   return (
     <div className="space-y-6">
-      {/* Database Connection Status Banner */}
+      {/* Service Status Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
-        <div className="flex items-center gap-2">
-          <Database className="h-4 w-4 text-brand-600 shrink-0" />
-          <div>
-            <span className="font-semibold text-slate-800">
-              Database Backend:{" "}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-brand-600 shrink-0" />
+            <span>
+              Database:{" "}
+              {isLiveSupabase ? (
+                <span className="font-semibold text-emerald-700">
+                  Supabase PostgreSQL (Connected)
+                </span>
+              ) : (
+                <span className="font-medium text-amber-700">
+                  In-Memory Mock Store
+                </span>
+              )}
             </span>
-            {isLiveSupabase ? (
-              <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                Connected to Supabase PostgreSQL
-              </span>
-            ) : (
-              <span className="font-medium text-amber-700">
-                In-Memory Store (Configure Supabase credentials in{" "}
-                <code className="rounded bg-slate-100 px-1 py-0.5">.env.local</code>{" "}
-                to persist in cloud PostgreSQL)
-              </span>
-            )}
+          </div>
+
+          <div className="hidden sm:inline text-slate-300">•</div>
+
+          <div className="flex items-center gap-2">
+            <CloudSun className="h-4 w-4 text-sky-600 shrink-0" />
+            <span>
+              Weather:{" "}
+              {weatherData?.isLive ? (
+                <span className="font-semibold text-emerald-700">
+                  WeatherAPI Live ({weatherData.location})
+                </span>
+              ) : (
+                <span className="font-medium text-slate-500">
+                  Mock Forecast
+                </span>
+              )}
+            </span>
           </div>
         </div>
 
         <button
           type="button"
-          onClick={fetchActivities}
-          disabled={isLoading}
+          onClick={() => {
+            fetchActivities();
+            fetchWeather(selectedLocation);
+          }}
+          disabled={isLoading || isWeatherLoading}
           className="inline-flex items-center gap-1.5 font-medium text-slate-600 hover:text-slate-900 focus:outline-none disabled:opacity-50"
         >
           <RefreshCw
-            className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`}
+            className={`h-3.5 w-3.5 ${
+              isLoading || isWeatherLoading ? "animate-spin" : ""
+            }`}
           />
-          <span>Refresh</span>
+          <span>Refresh All</span>
         </button>
       </div>
 
@@ -237,7 +292,7 @@ export function DashboardView() {
         }}
         activitiesCount={activities.length}
         alertsCount={alerts.length}
-        rainChance={mockWeather.precipitationProbability}
+        rainChance={activeWeather.precipitationProbability}
       />
 
       {/* 2. Attention-Needed Section */}
@@ -251,7 +306,13 @@ export function DashboardView() {
       {/* 3. Core Grid: Weather Summary & Today's Activities */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="lg:col-span-5">
-          <WeatherSummaryCard weather={mockWeather} />
+          <WeatherSummaryCard
+            weather={activeWeather}
+            isLive={weatherData?.isLive}
+            onLocationChange={handleLocationChange}
+            onRefresh={() => fetchWeather(selectedLocation)}
+            isLoading={isWeatherLoading}
+          />
         </div>
 
         <div className="lg:col-span-7">
