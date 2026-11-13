@@ -114,36 +114,41 @@ export const activityRepository = {
     const supabase = getSupabaseServerClient();
 
     if (supabase && isSupabaseConfigured()) {
-      let query = supabase
-        .from("activities")
-        .select("*")
-        .order("start_time", { ascending: true });
+      try {
+        let query = supabase
+          .from("activities")
+          .select("*")
+          .order("start_time", { ascending: true });
 
-      if (filters.status) {
-        query = query.eq("status", filters.status);
-      }
-      if (filters.category) {
-        query = query.eq("category", filters.category);
-      }
+        if (filters.status) {
+          query = query.eq("status", filters.status);
+        }
+        if (filters.category) {
+          query = query.eq("category", filters.category);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (error) {
-        console.error("[activityRepository.getAll] Supabase error:", error);
-        throw new Error(error.message);
-      }
-
-      let results = (data as ActivityRow[]).map(mapRowToActivity);
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        results = results.filter(
-          (a) =>
-            a.title.toLowerCase().includes(searchLower) ||
-            a.description?.toLowerCase().includes(searchLower)
+        if (error) {
+          console.warn("[activityRepository.getAll] Supabase error, falling back to local store:", error.message);
+        } else if (data) {
+          let results = (data as ActivityRow[]).map(mapRowToActivity);
+          if (filters.search) {
+            const searchLower = filters.search.toLowerCase();
+            results = results.filter(
+              (a) =>
+                a.title.toLowerCase().includes(searchLower) ||
+                a.description?.toLowerCase().includes(searchLower)
+            );
+          }
+          return { activities: results, isLiveSupabase: true };
+        }
+      } catch (networkErr: unknown) {
+        console.warn(
+          "[activityRepository.getAll] Network/connectivity issue, falling back to local store:",
+          networkErr
         );
       }
-
-      return { activities: results, isLiveSupabase: true };
     }
 
     // In-memory fallback
@@ -180,18 +185,21 @@ export const activityRepository = {
     const supabase = getSupabaseServerClient();
 
     if (supabase && isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from("activities")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
+      try {
+        const { data, error } = await supabase
+          .from("activities")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
 
-      if (error) {
-        console.error("[activityRepository.getById] Supabase error:", error);
-        throw new Error(error.message);
+        if (error) {
+          console.warn("[activityRepository.getById] Supabase error:", error.message);
+        } else if (data) {
+          return mapRowToActivity(data as ActivityRow);
+        }
+      } catch (err: unknown) {
+        console.warn("[activityRepository.getById] Network error:", err);
       }
-
-      return data ? mapRowToActivity(data as ActivityRow) : null;
     }
 
     // In-memory fallback
@@ -209,31 +217,34 @@ export const activityRepository = {
     const supabase = getSupabaseServerClient();
 
     if (supabase && isSupabaseConfigured()) {
-      const insertPayload = {
-        title: input.title,
-        description: input.description ?? null,
-        category: input.category,
-        start_time: input.startTime,
-        duration_minutes: input.durationMinutes,
-        monitoring_enabled: input.monitoringEnabled ?? true,
-        status: input.status ?? "pending",
-      };
+      try {
+        const insertPayload = {
+          title: input.title,
+          description: input.description ?? null,
+          category: input.category,
+          start_time: input.startTime,
+          duration_minutes: input.durationMinutes,
+          monitoring_enabled: input.monitoringEnabled ?? true,
+          status: input.status ?? "pending",
+        };
 
-      const { data, error } = await supabase
-        .from("activities")
-        .insert(insertPayload)
-        .select()
-        .single();
+        const { data, error } = await supabase
+          .from("activities")
+          .insert(insertPayload)
+          .select()
+          .single();
 
-      if (error) {
-        console.error("[activityRepository.create] Supabase error:", error);
-        throw new Error(error.message);
+        if (error) {
+          console.warn("[activityRepository.create] Supabase error:", error.message);
+        } else if (data) {
+          return {
+            activity: mapRowToActivity(data as ActivityRow),
+            isLiveSupabase: true,
+          };
+        }
+      } catch (err: unknown) {
+        console.warn("[activityRepository.create] Network error:", err);
       }
-
-      return {
-        activity: mapRowToActivity(data as ActivityRow),
-        isLiveSupabase: true,
-      };
     }
 
     // In-memory fallback
@@ -269,34 +280,37 @@ export const activityRepository = {
     const supabase = getSupabaseServerClient();
 
     if (supabase && isSupabaseConfigured()) {
-      const updatePayload: Record<string, unknown> = {};
-      if (input.title !== undefined) updatePayload.title = input.title;
-      if (input.description !== undefined)
-        updatePayload.description = input.description;
-      if (input.category !== undefined)
-        updatePayload.category = input.category;
-      if (input.startTime !== undefined)
-        updatePayload.start_time = input.startTime;
-      if (input.durationMinutes !== undefined)
-        updatePayload.duration_minutes = input.durationMinutes;
-      if (input.monitoringEnabled !== undefined)
-        updatePayload.monitoring_enabled = input.monitoringEnabled;
-      if (input.status !== undefined) updatePayload.status = input.status;
-      updatePayload.updated_at = new Date().toISOString();
+      try {
+        const updatePayload: Record<string, unknown> = {};
+        if (input.title !== undefined) updatePayload.title = input.title;
+        if (input.description !== undefined)
+          updatePayload.description = input.description;
+        if (input.category !== undefined)
+          updatePayload.category = input.category;
+        if (input.startTime !== undefined)
+          updatePayload.start_time = input.startTime;
+        if (input.durationMinutes !== undefined)
+          updatePayload.duration_minutes = input.durationMinutes;
+        if (input.monitoringEnabled !== undefined)
+          updatePayload.monitoring_enabled = input.monitoringEnabled;
+        if (input.status !== undefined) updatePayload.status = input.status;
+        updatePayload.updated_at = new Date().toISOString();
 
-      const { data, error } = await supabase
-        .from("activities")
-        .update(updatePayload)
-        .eq("id", id)
-        .select()
-        .maybeSingle();
+        const { data, error } = await supabase
+          .from("activities")
+          .update(updatePayload)
+          .eq("id", id)
+          .select()
+          .maybeSingle();
 
-      if (error) {
-        console.error("[activityRepository.update] Supabase error:", error);
-        throw new Error(error.message);
+        if (error) {
+          console.warn("[activityRepository.update] Supabase error:", error.message);
+        } else if (data) {
+          return mapRowToActivity(data as ActivityRow);
+        }
+      } catch (err: unknown) {
+        console.warn("[activityRepository.update] Network error:", err);
       }
-
-      return data ? mapRowToActivity(data as ActivityRow) : null;
     }
 
     // In-memory fallback
@@ -337,18 +351,21 @@ export const activityRepository = {
     const supabase = getSupabaseServerClient();
 
     if (supabase && isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from("activities")
-        .delete()
-        .eq("id", id)
-        .select();
+      try {
+        const { data, error } = await supabase
+          .from("activities")
+          .delete()
+          .eq("id", id)
+          .select();
 
-      if (error) {
-        console.error("[activityRepository.delete] Supabase error:", error);
-        throw new Error(error.message);
+        if (error) {
+          console.warn("[activityRepository.delete] Supabase error:", error.message);
+        } else if (data && data.length > 0) {
+          return true;
+        }
+      } catch (err: unknown) {
+        console.warn("[activityRepository.delete] Network error:", err);
       }
-
-      return Boolean(data && data.length > 0);
     }
 
     // In-memory fallback
