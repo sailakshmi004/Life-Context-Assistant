@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { X } from "lucide-react";
@@ -11,6 +12,12 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  // The unlock screen is intentionally chrome-free.
+  if (pathname === "/unlock") {
+    return <>{children}</>;
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900 antialiased">

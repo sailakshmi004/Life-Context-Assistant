@@ -22,7 +22,7 @@ export function WelcomeBanner({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-              Welcome back, Alex 👋
+              Welcome back 👋
             </h1>
           </div>
           <p className="mt-1 text-sm text-slate-600">

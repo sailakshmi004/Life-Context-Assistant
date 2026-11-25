@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  CloudSun,
   CloudRain,
   Droplets,
   Wind,
@@ -12,24 +11,19 @@ import {
   Sun,
   Cloud,
   CheckCircle2,
+  Search,
+  LocateFixed,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { WeatherContextData } from "@/types";
 
-const CITIES = [
-  "Hyderabad",
-  "London",
-  "New York",
-  "San Francisco",
-  "Tokyo",
-  "Sydney",
-];
-
 export default function WeatherPage() {
-  const [selectedCity, setSelectedCity] = useState("Hyderabad");
+  const [locationQuery, setLocationQuery] = useState("Hyderabad");
+  const [locationInput, setLocationInput] = useState("Hyderabad");
   const [weatherData, setWeatherData] = useState<WeatherContextData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLocating, setIsLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchWeather = useCallback(async (city: string) => {
@@ -50,9 +44,65 @@ export default function WeatherPage() {
     }
   }, []);
 
+  // Initialise from the configured default location.
   useEffect(() => {
-    fetchWeather(selectedCity);
-  }, [fetchWeather, selectedCity]);
+    let cancelled = false;
+    const load = async () => {
+      let location = "Hyderabad";
+      try {
+        const res = await fetch("/api/settings");
+        const json = await res.json();
+        if (res.ok && json.success && json.data?.defaultLocation) {
+          location = json.data.defaultLocation as string;
+        }
+      } catch {
+        /* use fallback */
+      }
+      if (cancelled) return;
+      setLocationQuery(location);
+      setLocationInput(location);
+      await fetchWeather(location);
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchWeather]);
+
+  const handleSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    const next = locationInput.trim();
+    if (!next) return;
+    setLocationQuery(next);
+    fetchWeather(next);
+  };
+
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Geolocation is not available in this browser.");
+      return;
+    }
+    setIsLocating(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords = `${position.coords.latitude.toFixed(4)},${position.coords.longitude.toFixed(4)}`;
+        setLocationQuery(coords);
+        setLocationInput(coords);
+        setIsLocating(false);
+        fetchWeather(coords);
+      },
+      (geoError) => {
+        setIsLocating(false);
+        setError(
+          geoError.code === geoError.PERMISSION_DENIED
+            ? "Location permission was denied. Search by city instead."
+            : "Could not determine your location. Search by city instead."
+        );
+      },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 }
+    );
+  };
 
   const current = weatherData?.current;
   const todayForecast = weatherData?.forecast?.[0];
@@ -68,29 +118,53 @@ export default function WeatherPage() {
             Weather Context
           </h1>
           <p className="text-sm text-slate-500">
-            Real-time atmospheric parameters powering Awarely&apos;s activity context engine.
+            Real-time atmospheric parameters for{" "}
+            <span className="font-medium text-slate-700">
+              {weatherData?.current.location ?? locationQuery}
+            </span>{" "}
+            powering the activity context engine.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 shadow-sm">
-            <MapPin className="h-4 w-4 text-brand-600" />
-            <select
-              value={selectedCity}
-              onChange={(e) => setSelectedCity(e.target.value)}
-              className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+        <div className="flex flex-wrap items-center gap-2">
+          <form
+            onSubmit={handleSearch}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 py-1 shadow-sm"
+          >
+            <MapPin className="h-4 w-4 text-brand-600 shrink-0" />
+            <input
+              type="text"
+              value={locationInput}
+              onChange={(event) => setLocationInput(event.target.value)}
+              placeholder="City or lat,long"
+              className="w-36 bg-transparent text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none sm:w-44"
+              aria-label="Location"
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !locationInput.trim()}
+              className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+              title="Search location"
             >
-              {CITIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
+              <Search className="h-3.5 w-3.5" />
+            </button>
+          </form>
 
           <button
             type="button"
-            onClick={() => fetchWeather(selectedCity)}
+            onClick={handleUseMyLocation}
+            disabled={isLoading || isLocating}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 shadow-sm"
+          >
+            <LocateFixed
+              className={`h-3.5 w-3.5 ${isLocating ? "animate-pulse" : ""}`}
+            />
+            <span className="hidden sm:inline">My location</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fetchWeather(locationQuery)}
             disabled={isLoading}
             className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 shadow-sm"
           >
@@ -161,7 +235,13 @@ export default function WeatherPage() {
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            {hasRainAlert ? "Rain alert active today" : "Low precipitation risk"}
+            {!weatherData
+              ? "Loading forecast…"
+              : !weatherData.isLive
+              ? "Live weather unavailable — alerts paused"
+              : hasRainAlert
+              ? "Rain alert active today"
+              : "Low precipitation risk"}
           </p>
         </Card>
 
@@ -206,7 +286,11 @@ export default function WeatherPage() {
           <div className="flex items-center justify-between">
             <CardTitle>24-Hour Hourly Weather Timeline</CardTitle>
             <Badge variant={weatherData?.isLive ? "success" : "neutral"}>
-              {weatherData?.isLive ? "WeatherAPI Live" : "Offline Fallback"}
+              {!weatherData
+                ? "Loading"
+                : weatherData.isLive
+                ? "WeatherAPI Live"
+                : "Offline Fallback"}
             </Badge>
           </div>
           <CardDescription>
@@ -308,7 +392,7 @@ export default function WeatherPage() {
               <span className="font-semibold text-slate-900 block mb-1">
                 2. Weather Window Extraction
               </span>
-              Extracts matching hourly precipitation and wind probabilities from WeatherAPI.
+              Extracts the matching hourly precipitation probabilities from WeatherAPI.
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <span className="font-semibold text-slate-900 block mb-1">

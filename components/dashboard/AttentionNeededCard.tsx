@@ -7,13 +7,38 @@ import { AttentionAlert } from "@/types";
 
 interface AttentionNeededSectionProps {
   alerts: AttentionAlert[];
+  isLoading?: boolean;
   onAcknowledgeAlert?: (id: string) => void;
+  onAdjustSchedule?: (activityId: string) => void;
 }
 
 export function AttentionNeededSection({
   alerts,
+  isLoading = false,
   onAcknowledgeAlert,
+  onAdjustSchedule,
 }: AttentionNeededSectionProps) {
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Attention Needed</CardTitle>
+          <CardDescription>
+            Checking the forecast against your activities…
+          </CardDescription>
+        </CardHeader>
+        <div className="space-y-3">
+          {[0, 1].map((item) => (
+            <div
+              key={item}
+              className="h-16 animate-pulse rounded-xl border border-slate-100 bg-slate-50"
+            />
+          ))}
+        </div>
+      </Card>
+    );
+  }
+
   if (alerts.length === 0) {
     return (
       <Card>
@@ -98,6 +123,8 @@ export function AttentionNeededSection({
                 variant="primary"
                 size="sm"
                 className="text-xs bg-amber-600 hover:bg-amber-700"
+                onClick={() => onAdjustSchedule?.(alert.activityId)}
+                disabled={!onAdjustSchedule || !alert.activityId}
                 icon={<ArrowRight className="h-3.5 w-3.5" />}
               >
                 Adjust Schedule

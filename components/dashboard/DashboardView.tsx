@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { WelcomeBanner } from "./WelcomeBanner";
 import { WeatherSummaryCard } from "./WeatherSummaryCard";
 import { AttentionNeededSection } from "./AttentionNeededCard";
@@ -8,27 +8,82 @@ import { TodaysActivities } from "./TodaysActivities";
 import { UpcomingReminders } from "./UpcomingReminders";
 import { ActivityFormModal } from "@/components/activities/ActivityFormModal";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
-import { mockWeather, mockReminders } from "@/lib/mock-data";
-import { evaluateActivityAgainstForecast } from "@/lib/rules/engine";
+import { fallbackWeather } from "@/lib/fallback-data";
+import { isToday, formatTimeDisplay } from "@/lib/utils";
 import {
   Activity,
   ActivityStatus,
+  AppNotification,
   AttentionAlert,
   CreateActivityInput,
   Reminder,
   UpdateActivityInput,
   WeatherContextData,
 } from "@/types";
-import { Database, AlertCircle, RefreshCw, CloudSun } from "lucide-react";
+import { Database, AlertCircle, RefreshCw, CloudSun, Bell } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+
+function stripPrefix(title: string, prefix: string): string {
+  return title.startsWith(prefix) ? title.slice(prefix.length) : title;
+}
+
+function alertsFromNotifications(
+  items: AppNotification[],
+  activeActivityIds: Set<string>
+): AttentionAlert[] {
+  return items
+    .filter(
+      (item) =>
+        item.type === "weather_alert" &&
+        Boolean(item.activityId) &&
+        activeActivityIds.has(item.activityId as string)
+    )
+    .map((item) => ({
+      id: item.id,
+      activityId: item.activityId ?? "",
+      activityTitle: stripPrefix(item.title, "Weather conflict: "),
+      scheduledTime: item.scheduledFor
+        ? formatTimeDisplay(item.scheduledFor)
+        : "Scheduled window",
+      severity: item.severity,
+      reason: item.message,
+      suggestion: item.suggestion ?? "",
+    }));
+}
+
+function remindersFromNotifications(
+  items: AppNotification[],
+  activeActivityIds: Set<string>
+): Reminder[] {
+  const now = Date.now();
+  return items
+    .filter(
+      (item) =>
+        item.type === "reminder" &&
+        Boolean(item.activityId) &&
+        activeActivityIds.has(item.activityId as string) &&
+        (!item.scheduledFor ||
+          new Date(item.scheduledFor).getTime() >= now - 5 * 60 * 1000)
+    )
+    .map((item) => ({
+      id: item.id,
+      activityId: item.activityId ?? undefined,
+      activityTitle: stripPrefix(item.title, "Starting soon: "),
+      dueTime: item.scheduledFor ? formatTimeDisplay(item.scheduledFor) : "",
+      message: item.message,
+      priority: "high" as const,
+      isWeatherAlert: false,
+    }));
+}
 
 export function DashboardView() {
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [alerts, setAlerts] = useState<AttentionAlert[]>([]);
-  const [reminders, setReminders] = useState<Reminder[]>(mockReminders);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isLiveSupabase, setIsLiveSupabase] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scope, setScope] = useState<"today" | "all">("today");
 
   // Weather State
   const [selectedLocation, setSelectedLocation] = useState<string>("Hyderabad");
@@ -45,7 +100,6 @@ export function DashboardView() {
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // 1. Fetch Weather from API
   const fetchWeather = useCallback(async (loc: string) => {
     setIsWeatherLoading(true);
     try {
@@ -61,7 +115,6 @@ export function DashboardView() {
     }
   }, []);
 
-  // 2. Fetch activities from Next.js Route Handler
   const fetchActivities = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -81,35 +134,112 @@ export function DashboardView() {
     }
   }, []);
 
-  // Initial load
-  useEffect(() => {
-    fetchActivities();
-    fetchWeather(selectedLocation);
-  }, [fetchActivities, fetchWeather, selectedLocation]);
-
-  // Re-evaluate context rules when activities or weather data update
-  useEffect(() => {
-    if (!weatherData) return;
-
-    const newAlerts: AttentionAlert[] = [];
-    activities.forEach((act) => {
-      if (act.status !== "completed" && act.status !== "cancelled") {
-        const evalResult = evaluateActivityAgainstForecast(act, weatherData);
-        if (evalResult.shouldAlert && evalResult.alert) {
-          newAlerts.push({
-            id: `alert-${act.id}`,
-            ...evalResult.alert,
-          });
-        }
+  const fetchNotifications = useCallback(async () => {
+    setIsNotificationsLoading(true);
+    try {
+      const res = await fetch("/api/notifications");
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setNotifications(json.data || []);
       }
-    });
-    setAlerts(newAlerts);
-  }, [activities, weatherData]);
+    } catch (err: unknown) {
+      console.error("[DashboardView.fetchNotifications] Error:", err);
+    } finally {
+      setIsNotificationsLoading(false);
+    }
+  }, []);
+
+  const runSync = useCallback(async () => {
+    try {
+      await fetch("/api/notifications/sync", { method: "POST" });
+    } catch (err: unknown) {
+      console.error("[DashboardView.runSync] Error:", err);
+    }
+  }, []);
+
+  // Bootstrap: settings → location → activities/weather/notifications → sync
+  useEffect(() => {
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      let location = "Hyderabad";
+      try {
+        const res = await fetch("/api/settings");
+        const json = await res.json();
+        if (res.ok && json.success && json.data?.defaultLocation) {
+          location = json.data.defaultLocation as string;
+        }
+      } catch {
+        /* fall back to default location */
+      }
+
+      if (cancelled) return;
+      setSelectedLocation(location);
+
+      await Promise.all([
+        fetchActivities(),
+        fetchWeather(location),
+        fetchNotifications(),
+      ]);
+
+      await runSync();
+      if (!cancelled) await fetchNotifications();
+    };
+
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchActivities, fetchWeather, fetchNotifications, runSync]);
+
+  const activeActivityIds = useMemo(
+    () =>
+      new Set(
+        activities
+          .filter(
+            (activity) =>
+              activity.status !== "completed" && activity.status !== "cancelled"
+          )
+          .map((activity) => activity.id)
+      ),
+    [activities]
+  );
+  const alerts = useMemo(
+    () => alertsFromNotifications(notifications, activeActivityIds),
+    [notifications, activeActivityIds]
+  );
+  const reminders = useMemo(
+    () => remindersFromNotifications(notifications, activeActivityIds),
+    [notifications, activeActivityIds]
+  );
+
+  const visibleActivities = useMemo(
+    () =>
+      scope === "today"
+        ? activities.filter((activity) => isToday(activity.startTime))
+        : activities,
+    [activities, scope]
+  );
+  const todayCount = useMemo(
+    () => activities.filter((activity) => isToday(activity.startTime)).length,
+    [activities]
+  );
 
   // Handle Location Switch
   const handleLocationChange = (newLoc: string) => {
     setSelectedLocation(newLoc);
     fetchWeather(newLoc);
+  };
+
+  const refreshEverything = async () => {
+    setError(null);
+    await Promise.all([
+      fetchActivities(),
+      fetchWeather(selectedLocation),
+      fetchNotifications(),
+    ]);
+    await runSync();
+    await fetchNotifications();
   };
 
   // Handle Create or Update
@@ -120,33 +250,28 @@ export function DashboardView() {
     setFormServerError(null);
 
     try {
-      if (selectedActivity) {
-        // PATCH /api/activities/[id]
-        const res = await fetch(`/api/activities/${selectedActivity.id}`, {
-          method: "PATCH",
+      const isEdit = Boolean(selectedActivity);
+      const res = await fetch(
+        isEdit ? `/api/activities/${selectedActivity!.id}` : "/api/activities",
+        {
+          method: isEdit ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
-        });
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          throw new Error(json.error || "Failed to update activity");
         }
-      } else {
-        // POST /api/activities
-        const res = await fetch("/api/activities", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        });
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          throw new Error(json.error || "Failed to create activity");
-        }
+      );
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(
+          json.error ||
+            (isEdit ? "Failed to update activity" : "Failed to create activity")
+        );
       }
 
       setIsFormModalOpen(false);
       setSelectedActivity(null);
       await fetchActivities();
+      await runSync();
+      await fetchNotifications();
     } catch (err: unknown) {
       setFormServerError(
         err instanceof Error ? err.message : "An unexpected error occurred"
@@ -159,7 +284,6 @@ export function DashboardView() {
   // Handle Quick Status Change
   const handleStatusChange = async (id: string, newStatus: ActivityStatus) => {
     try {
-      // Optimistic local update
       setActivities((prev) =>
         prev.map((act) => (act.id === id ? { ...act, status: newStatus } : act))
       );
@@ -174,9 +298,10 @@ export function DashboardView() {
         throw new Error(json.error || "Failed to update status");
       }
       await fetchActivities();
+      await fetchNotifications();
     } catch (err: unknown) {
       console.error("[DashboardView.handleStatusChange] Error:", err);
-      await fetchActivities(); // Rollback on error
+      await fetchActivities();
     }
   };
 
@@ -194,6 +319,7 @@ export function DashboardView() {
       }
       setActivityToDelete(null);
       await fetchActivities();
+      await fetchNotifications();
     } catch (err: unknown) {
       console.error("[DashboardView.handleConfirmDelete] Error:", err);
       alert(err instanceof Error ? err.message : "Failed to delete activity");
@@ -202,11 +328,40 @@ export function DashboardView() {
     }
   };
 
-  const handleDismissAlert = (alertId: string) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+  const handleDismissAlert = async (alertId: string) => {
+    setNotifications((prev) => prev.filter((item) => item.id !== alertId));
+    try {
+      await fetch(`/api/notifications/${alertId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dismissed: true }),
+      });
+    } catch (err: unknown) {
+      console.error("[DashboardView.handleDismissAlert] Error:", err);
+      await fetchNotifications();
+    }
   };
 
-  const activeWeather = weatherData?.current || mockWeather;
+  const activeWeather = weatherData?.current || fallbackWeather;
+
+  const scopeToggle = (
+    <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-[11px] font-medium">
+      {(["today", "all"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => setScope(option)}
+          className={`rounded-md px-2 py-0.5 capitalize transition-colors ${
+            scope === option
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -219,12 +374,10 @@ export function DashboardView() {
               Database:{" "}
               {isLiveSupabase ? (
                 <span className="font-semibold text-emerald-700">
-                  Supabase PostgreSQL (Connected)
+                  Supabase connected
                 </span>
               ) : (
-                <span className="font-medium text-amber-700">
-                  In-Memory Mock Store
-                </span>
+                <span className="font-medium text-amber-700">Unavailable</span>
               )}
             </span>
           </div>
@@ -237,23 +390,32 @@ export function DashboardView() {
               Weather:{" "}
               {weatherData?.isLive ? (
                 <span className="font-semibold text-emerald-700">
-                  WeatherAPI Live ({weatherData.location})
+                  Live ({weatherData.location})
                 </span>
               ) : (
                 <span className="font-medium text-slate-500">
-                  Mock Forecast
+                  Fallback forecast
                 </span>
               )}
+            </span>
+          </div>
+
+          <div className="hidden sm:inline text-slate-300">•</div>
+
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>
+              Alerts:{" "}
+              <span className="font-semibold text-slate-800">
+                {alerts.length}
+              </span>
             </span>
           </div>
         </div>
 
         <button
           type="button"
-          onClick={() => {
-            fetchActivities();
-            fetchWeather(selectedLocation);
-          }}
+          onClick={refreshEverything}
           disabled={isLoading || isWeatherLoading}
           className="inline-flex items-center gap-1.5 font-medium text-slate-600 hover:text-slate-900 focus:outline-none disabled:opacity-50"
         >
@@ -262,7 +424,7 @@ export function DashboardView() {
               isLoading || isWeatherLoading ? "animate-spin" : ""
             }`}
           />
-          <span>Refresh All</span>
+          <span>Refresh all</span>
         </button>
       </div>
 
@@ -276,7 +438,7 @@ export function DashboardView() {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchActivities}
+            onClick={refreshEverything}
             className="text-xs shrink-0"
           >
             Retry
@@ -284,26 +446,31 @@ export function DashboardView() {
         </div>
       )}
 
-      {/* 1. Welcome Message & Quick Status Banner */}
       <WelcomeBanner
         onAddActivityClick={() => {
           setSelectedActivity(null);
           setIsFormModalOpen(true);
         }}
-        activitiesCount={activities.length}
+        activitiesCount={todayCount}
         alertsCount={alerts.length}
         rainChance={activeWeather.precipitationProbability}
       />
 
-      {/* 2. Attention-Needed Section */}
       <section aria-label="Attention Needed Section">
         <AttentionNeededSection
           alerts={alerts}
+          isLoading={isNotificationsLoading}
           onAcknowledgeAlert={handleDismissAlert}
+          onAdjustSchedule={(activityId) => {
+            const activity = activities.find((item) => item.id === activityId);
+            if (activity) {
+              setSelectedActivity(activity);
+              setIsFormModalOpen(true);
+            }
+          }}
         />
       </section>
 
-      {/* 3. Core Grid: Weather Summary & Today's Activities */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="lg:col-span-5">
           <WeatherSummaryCard
@@ -317,8 +484,25 @@ export function DashboardView() {
 
         <div className="lg:col-span-7">
           <TodaysActivities
-            activities={activities}
+            activities={visibleActivities}
             isLoading={isLoading}
+            title={scope === "today" ? "Today's Activities" : "All Activities"}
+            description={
+              scope === "today"
+                ? `${todayCount} scheduled today · ${activities.length} total tracked`
+                : `${activities.length} tracked activities, sorted by start time`
+            }
+            emptyTitle={
+              scope === "today"
+                ? "Nothing scheduled for today"
+                : "No activities found"
+            }
+            emptyDescription={
+              scope === "today"
+                ? "Switch to “All” to see future activities, or add something for today."
+                : "Start by scheduling an outdoor or household task like drying clothes or washing the car."
+            }
+            headerAction={scopeToggle}
             onAddClick={() => {
               setSelectedActivity(null);
               setIsFormModalOpen(true);
@@ -333,12 +517,13 @@ export function DashboardView() {
         </div>
       </div>
 
-      {/* 4. Upcoming Reminders Section */}
       <section aria-label="Upcoming Reminders Section">
-        <UpcomingReminders reminders={reminders} />
+        <UpcomingReminders
+          reminders={reminders}
+          isLoading={isNotificationsLoading}
+        />
       </section>
 
-      {/* Activity Create / Edit Modal */}
       <ActivityFormModal
         isOpen={isFormModalOpen}
         onClose={() => {
@@ -352,7 +537,6 @@ export function DashboardView() {
         serverError={formServerError}
       />
 
-      {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={Boolean(activityToDelete)}
         onClose={() => setActivityToDelete(null)}

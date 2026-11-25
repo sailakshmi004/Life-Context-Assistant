@@ -7,9 +7,8 @@ import {
   Trash2,
   ShieldCheck,
   ShieldAlert,
-  CheckCircle2,
-  Calendar,
-  MoreVertical,
+  MapPin,
+  Eye,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -20,6 +19,7 @@ interface ActivityItemProps {
   activity: Activity;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
+  onView?: (activity: Activity) => void;
   onStatusChange?: (id: string, newStatus: ActivityStatus) => Promise<void> | void;
 }
 
@@ -27,6 +27,7 @@ export function ActivityItem({
   activity,
   onEdit,
   onDelete,
+  onView,
   onStatusChange,
 }: ActivityItemProps) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -114,9 +115,17 @@ export function ActivityItem({
           </p>
         )}
 
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-          <span>{formatSchedule(activity.startTime, activity.durationMinutes)}</span>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <span>{formatSchedule(activity.startTime, activity.durationMinutes)}</span>
+          </div>
+          {activity.location && (
+            <span className="flex items-center gap-1">
+              <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              {activity.location}
+            </span>
+          )}
         </div>
       </div>
 
@@ -145,8 +154,20 @@ export function ActivityItem({
           </select>
         </div>
 
-        {/* Action Buttons: Edit and Delete */}
+        {/* Action Buttons: View, Edit and Delete */}
         <div className="flex items-center gap-1">
+          {onView && (
+            <button
+              type="button"
+              onClick={() => onView(activity)}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
+              title="View activity details"
+              aria-label={`View ${activity.title} details`}
+            >
+              <Eye className="h-4 w-4" />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => onEdit(activity)}

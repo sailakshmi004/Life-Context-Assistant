@@ -1,0 +1,19 @@
+# Caddy reverse proxy.
+#
+# SITE_ADDRESS comes from .env:
+#   - awarely.<your-ip>.sslip.io  -> automatic Let's Encrypt HTTPS
+#   - your-domain.example.com     -> automatic Let's Encrypt HTTPS
+#   - :80                         -> plain HTTP (local/LAN only, no push)
+{$SITE_ADDRESS} {
+	encode gzip zstd
+	reverse_proxy app:3000
+
+	header {
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

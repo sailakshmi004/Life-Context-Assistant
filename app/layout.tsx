@@ -1,11 +1,33 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/layout/AppShell";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 export const metadata: Metadata = {
-  title: "Awarely — Life Context Assistant",
+  applicationName: "Awarely",
+  title: {
+    default: "Awarely — Life Context Assistant",
+    template: "%s — Awarely",
+  },
   description:
-    "A context-aware activity reminder application that considers weather and external conditions before reminding you to take action.",
+    "A private, context-aware activity assistant that checks the weather forecast during each activity's scheduled window before reminding you to act.",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+  },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#016ac8",
 };
 
 export default function RootLayout({
@@ -16,9 +38,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen font-sans antialiased">
+        <ServiceWorkerRegister />
         <AppShell>{children}</AppShell>
       </body>
     </html>
   );
 }
-

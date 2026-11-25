@@ -29,7 +29,7 @@ const navItems = [
     name: "Activities",
     href: "/activities",
     icon: CalendarCheck2,
-    badge: 5,
+    badge: undefined,
   },
   {
     name: "Weather",
@@ -41,7 +41,7 @@ const navItems = [
     name: "Notifications",
     href: "/notifications",
     icon: Bell,
-    badge: 2,
+    badge: undefined,
   },
   {
     name: "Settings",
@@ -65,7 +65,7 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
           <div className="flex items-center gap-1.5">
             <span className="text-base font-bold tracking-tight text-slate-900">Awarely</span>
             <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
-              v0.1
+              v0.2
             </span>
           </div>
           <p className="text-[11px] text-slate-500">Life Context Assistant</p>
@@ -135,7 +135,7 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
           </p>
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Active (Phase 1 Mock Mode)
+            Context engine active
           </div>
         </div>
       </div>

@@ -1,11 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Plus,
   CalendarCheck2,
-  Search,
-  Filter,
   RefreshCw,
   AlertCircle,
   Database,
@@ -14,19 +12,24 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { ActivityItem } from "@/components/activities/ActivityItem";
 import { ActivityFormModal } from "@/components/activities/ActivityFormModal";
+import { ActivityDetailModal } from "@/components/activities/ActivityDetailModal";
+import {
+  ActivityFilters,
+  type TimeScope,
+} from "@/components/activities/ActivityFilters";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { ActivityListSkeleton } from "@/components/activities/ActivitySkeleton";
 import {
   Activity,
-  ActivityCategory,
+  ActivityFacets,
   ActivityStatus,
   CreateActivityInput,
   UpdateActivityInput,
 } from "@/types";
-import { VALID_CATEGORIES, VALID_STATUSES } from "@/lib/validations/activity";
 
 export default function ActivitiesPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [facets, setFacets] = useState<ActivityFacets | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLiveSupabase, setIsLiveSupabase] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +38,12 @@ export default function ActivitiesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [timeScope, setTimeScope] = useState<TimeScope>("all");
 
   // Modal States
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [detailActivity, setDetailActivity] = useState<Activity | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formServerError, setFormServerError] = useState<string | null>(null);
 
@@ -46,7 +51,7 @@ export default function ActivitiesPage() {
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Fetch activities from API
+  // Fetch activities + filter facets from API
   const fetchActivities = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -57,16 +62,23 @@ export default function ActivitiesPage() {
         params.append("category", selectedCategory);
       if (searchQuery.trim()) params.append("search", searchQuery.trim());
 
-      const url = `/api/activities?${params.toString()}`;
-      const res = await fetch(url);
-      const json = await res.json();
+      const [activitiesResponse, facetsResponse] = await Promise.all([
+        fetch(`/api/activities?${params.toString()}`),
+        fetch("/api/activities/facets"),
+      ]);
 
-      if (!res.ok || !json.success) {
+      const json = await activitiesResponse.json();
+      if (!activitiesResponse.ok || !json.success) {
         throw new Error(json.error || "Failed to fetch activities");
       }
 
       setActivities(json.data || []);
       setIsLiveSupabase(Boolean(json.isLiveSupabase));
+
+      if (facetsResponse.ok) {
+        const facetsJson = await facetsResponse.json();
+        if (facetsJson.success) setFacets(facetsJson.data);
+      }
     } catch (err: unknown) {
       console.error("[ActivitiesPage.fetchActivities] Error:", err);
       setError(
@@ -80,6 +92,44 @@ export default function ActivitiesPage() {
   useEffect(() => {
     fetchActivities();
   }, [fetchActivities]);
+
+  // If a selected facet disappears (e.g. after deleting the last item),
+  // fall back to "All" instead of showing an impossible filter.
+  useEffect(() => {
+    if (!facets) return;
+    if (
+      selectedCategory !== "all" &&
+      facets.categories[selectedCategory as keyof ActivityFacets["categories"]] ===
+        0
+    ) {
+      setSelectedCategory("all");
+    }
+    if (
+      selectedStatus !== "all" &&
+      facets.statuses[selectedStatus as keyof ActivityFacets["statuses"]] === 0
+    ) {
+      setSelectedStatus("all");
+    }
+  }, [facets, selectedCategory, selectedStatus]);
+
+  const visibleActivities = useMemo(() => {
+    if (timeScope === "all") return activities;
+    const now = Date.now();
+    return activities.filter((activity) => {
+      const start = new Date(activity.startTime).getTime();
+      if (Number.isNaN(start)) return false;
+      const end = start + activity.durationMinutes * 60_000;
+      return timeScope === "upcoming" ? end >= now : end < now;
+    });
+  }, [activities, timeScope]);
+
+  const syncAlerts = useCallback(async () => {
+    try {
+      await fetch("/api/notifications/sync", { method: "POST" });
+    } catch (err: unknown) {
+      console.error("[ActivitiesPage.syncAlerts] Error:", err);
+    }
+  }, []);
 
   // Handle Create or Update
   const handleFormSubmit = async (
@@ -116,6 +166,7 @@ export default function ActivitiesPage() {
       setIsFormModalOpen(false);
       setSelectedActivity(null);
       await fetchActivities();
+      await syncAlerts();
     } catch (err: unknown) {
       setFormServerError(
         err instanceof Error ? err.message : "An unexpected error occurred"
@@ -142,6 +193,7 @@ export default function ActivitiesPage() {
         throw new Error(json.error || "Failed to update status");
       }
       await fetchActivities();
+      await syncAlerts();
     } catch (err: unknown) {
       console.error("[ActivitiesPage.handleStatusChange] Error:", err);
       await fetchActivities();
@@ -162,6 +214,7 @@ export default function ActivitiesPage() {
       }
       setActivityToDelete(null);
       await fetchActivities();
+      await syncAlerts();
     } catch (err: unknown) {
       console.error("[ActivitiesPage.handleConfirmDelete] Error:", err);
       alert(err instanceof Error ? err.message : "Failed to delete activity");
@@ -219,11 +272,11 @@ export default function ActivitiesPage() {
           Backend:{" "}
           {isLiveSupabase ? (
             <span className="font-semibold text-emerald-700">
-              Supabase PostgreSQL (Connected)
+              Supabase (Connected)
             </span>
           ) : (
-            <span className="font-medium text-amber-700">
-              In-Memory Mock Store (Add Supabase credentials to .env.local to persist)
+            <span className="font-medium text-rose-700">
+              Unavailable — check the server environment variables
             </span>
           )}
         </span>
@@ -248,74 +301,23 @@ export default function ActivitiesPage() {
       )}
 
       {/* Filter and Search Bar */}
-      <Card className="p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          {/* Search Box */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by title or description..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 py-1.5 pl-9 pr-3 text-xs text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-          </div>
-
-          {/* Category & Status Dropdowns */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-              <Filter className="h-3.5 w-3.5" />
-              <span>Filters:</span>
-            </div>
-
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              <option value="all">All Categories</option>
-              {VALID_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              <option value="all">All Statuses</option>
-              {VALID_STATUSES.map((st) => (
-                <option key={st} value={st}>
-                  {st === "in_progress"
-                    ? "In Progress"
-                    : st.charAt(0).toUpperCase() + st.slice(1)}
-                </option>
-              ))}
-            </select>
-
-            {(selectedCategory !== "all" ||
-              selectedStatus !== "all" ||
-              searchQuery) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedCategory("all");
-                  setSelectedStatus("all");
-                  setSearchQuery("");
-                }}
-                className="text-xs text-slate-500"
-              >
-                Reset
-              </Button>
-            )}
-          </div>
-        </div>
-      </Card>
+      <ActivityFilters
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        selectedCategory={selectedCategory}
+        onCategoryChange={setSelectedCategory}
+        selectedStatus={selectedStatus}
+        onStatusChange={setSelectedStatus}
+        timeScope={timeScope}
+        onTimeScopeChange={setTimeScope}
+        facets={facets}
+        onReset={() => {
+          setSelectedCategory("all");
+          setSelectedStatus("all");
+          setSearchQuery("");
+          setTimeScope("all");
+        }}
+      />
 
       {/* Main Activities List */}
       <Card>
@@ -326,7 +328,8 @@ export default function ActivitiesPage() {
               <CardTitle>Activities List</CardTitle>
             </div>
             <span className="text-xs font-semibold text-slate-500">
-              {activities.length} {activities.length === 1 ? "item" : "items"}
+              {visibleActivities.length}{" "}
+              {visibleActivities.length === 1 ? "item" : "items"}
             </span>
           </div>
           <CardDescription>
@@ -336,7 +339,7 @@ export default function ActivitiesPage() {
 
         {isLoading ? (
           <ActivityListSkeleton count={4} />
-        ) : activities.length === 0 ? (
+        ) : visibleActivities.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-3">
               <CalendarCheck2 className="h-6 w-6" />
@@ -345,8 +348,11 @@ export default function ActivitiesPage() {
               No activities found
             </h3>
             <p className="mt-1 text-xs text-slate-500 max-w-sm">
-              {searchQuery || selectedCategory !== "all" || selectedStatus !== "all"
-                ? "No activities match your current search or filters. Try adjusting your search criteria."
+              {searchQuery ||
+              selectedCategory !== "all" ||
+              selectedStatus !== "all" ||
+              timeScope !== "all"
+                ? "No activities match your current search or filters. Try adjusting them."
                 : "You haven't scheduled any activities yet. Click 'Add Activity' to get started."}
             </p>
             <Button
@@ -364,10 +370,11 @@ export default function ActivitiesPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {activities.map((act) => (
+            {visibleActivities.map((act) => (
               <ActivityItem
                 key={act.id}
                 activity={act}
+                onView={(activity) => setDetailActivity(activity)}
                 onEdit={(activity) => {
                   setSelectedActivity(activity);
                   setIsFormModalOpen(true);
@@ -379,6 +386,23 @@ export default function ActivitiesPage() {
           </div>
         )}
       </Card>
+
+      {/* Activity Detail Modal */}
+      <ActivityDetailModal
+        isOpen={Boolean(detailActivity)}
+        activity={detailActivity}
+        onClose={() => setDetailActivity(null)}
+        onEdit={(activity) => {
+          setDetailActivity(null);
+          setSelectedActivity(activity);
+          setIsFormModalOpen(true);
+        }}
+        onDelete={(activity) => {
+          setDetailActivity(null);
+          setActivityToDelete(activity);
+        }}
+        onStatusChange={handleStatusChange}
+      />
 
       {/* Activity Create / Edit Modal */}
       <ActivityFormModal

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWeatherForecast } from "@/lib/weather/client";
+import { publicErrorMessage } from "@/lib/api/error";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +24,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error: unknown) {
     console.error("[GET /api/weather] Error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch weather data";
+    const message = publicErrorMessage(error, "Failed to fetch weather data");
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

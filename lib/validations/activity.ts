@@ -36,6 +36,7 @@ export function normalizeActivityPayload(
     durationMinutes: raw.durationMinutes ?? raw.duration_minutes,
     monitoringEnabled: raw.monitoringEnabled ?? raw.monitoring_enabled,
     status: raw.status,
+    location: raw.location,
   };
 }
 
@@ -138,6 +139,19 @@ export function validateCreateActivityInput(raw: unknown): {
     }
   }
 
+  // 8. Location (Optional, used for per-activity weather checks)
+  let cleanLocation: string | null = null;
+  if (normalized.location !== undefined && normalized.location !== null) {
+    if (typeof normalized.location !== "string") {
+      errors.location = "Location must be a string.";
+    } else {
+      cleanLocation = normalized.location.trim() || null;
+      if (cleanLocation && cleanLocation.length > 120) {
+        errors.location = "Location cannot exceed 120 characters.";
+      }
+    }
+  }
+
   if (Object.keys(errors).length > 0) {
     return { isValid: false, errors };
   }
@@ -163,6 +177,7 @@ export function validateCreateActivityInput(raw: unknown): {
           ? normalized.monitoringEnabled
           : true,
       status: (normalized.status as ActivityStatus) || "pending",
+      location: cleanLocation,
     },
   };
 }
@@ -279,6 +294,23 @@ export function validateUpdateActivityInput(raw: unknown): {
       errors.status = `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}.`;
     } else {
       data.status = normalized.status as ActivityStatus;
+    }
+  }
+
+  // Location
+  if (normalized.location !== undefined) {
+    fieldsProvided++;
+    if (normalized.location === null) {
+      data.location = null;
+    } else if (typeof normalized.location !== "string") {
+      errors.location = "Location must be a string or null.";
+    } else {
+      const trimmed = normalized.location.trim();
+      if (trimmed.length > 120) {
+        errors.location = "Location cannot exceed 120 characters.";
+      } else {
+        data.location = trimmed || null;
+      }
     }
   }
 

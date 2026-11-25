@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { activityRepository } from "@/lib/supabase/activities";
 import { validateCreateActivityInput } from "@/lib/validations/activity";
+import { publicErrorMessage } from "@/lib/api/error";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +33,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error: unknown) {
     console.error("[GET /api/activities] Error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch activities";
+    const message = publicErrorMessage(error, "Failed to fetch activities");
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -85,8 +85,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: unknown) {
     console.error("[POST /api/activities] Error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to create activity";
+    const message = publicErrorMessage(error, "Failed to create activity");
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

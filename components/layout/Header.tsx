@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Menu, Calendar, CloudRain } from "lucide-react";
+import Link from "next/link";
+import { Menu, Calendar, Bell, Settings } from "lucide-react";
 import { formatFullDate } from "@/lib/utils";
 
 interface HeaderProps {
@@ -10,10 +11,34 @@ interface HeaderProps {
 
 export function Header({ onOpenMobileMenu }: HeaderProps) {
   // Use client state for date to avoid hydration mismatches across server/client time zones
-  const [formattedDate, setFormattedDate] = useState<string>("Saturday, November 7, 2026");
+  const [formattedDate, setFormattedDate] = useState<string>("");
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     setFormattedDate(formatFullDate(new Date()));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadUnread = async () => {
+      try {
+        const response = await fetch("/api/notifications?unread=1&limit=1");
+        const json = await response.json();
+        if (active && response.ok && json.success) {
+          setUnreadCount(Number(json.unreadCount) || 0);
+        }
+      } catch {
+        /* header is decorative; ignore transient failures */
+      }
+    };
+
+    loadUnread();
+    const timer = window.setInterval(loadUnread, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, []);
 
   return (
@@ -40,34 +65,61 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
         </div>
       </div>
 
-      {/* Right section: Current Date, Context Alert pill, Profile */}
+      {/* Right section: Current Date, Alerts, Profile */}
       <div className="flex items-center gap-3 sm:gap-4">
-        {/* Weather Alert Chip */}
-        <div className="hidden items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 md:flex">
-          <CloudRain className="h-3.5 w-3.5 text-amber-600" />
-          <span>Rain alert active this afternoon</span>
-        </div>
+        {unreadCount > 0 && (
+          <Link
+            href="/notifications"
+            className="hidden items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 md:flex"
+          >
+            <Bell className="h-3.5 w-3.5 text-amber-600" />
+            <span>
+              {unreadCount} alert{unreadCount === 1 ? "" : "s"} need attention
+            </span>
+          </Link>
+        )}
 
-        {/* Current Date */}
-        <div className="flex items-center gap-1.5 text-xs text-slate-600 sm:text-sm">
-          <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
-          <span className="font-medium">{formattedDate}</span>
-        </div>
+        {formattedDate && (
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 sm:text-sm">
+            <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+            <span className="font-medium">{formattedDate}</span>
+          </div>
+        )}
 
-        {/* Profile Placeholder */}
-        <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-slate-200">
+        <Link
+          href="/notifications"
+          className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          aria-label="Open notifications"
+        >
+          <Bell className="h-4 w-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </Link>
+
+        <Link
+          href="/settings"
+          className="flex items-center gap-2 border-l border-slate-200 pl-2 sm:pl-3"
+        >
           <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white shadow-sm ring-2 ring-white">
-            AC
+            AW
             <span
               className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500"
-              title="Online"
+              title="Active"
             />
           </div>
           <div className="hidden text-left sm:block">
-            <p className="text-xs font-medium text-slate-900 leading-tight">Alex Chen</p>
-            <p className="text-[10px] text-slate-400">Personal Space</p>
+            <p className="text-xs font-medium text-slate-900 leading-tight">
+              Personal Space
+            </p>
+            <p className="flex items-center gap-1 text-[10px] text-slate-400">
+              <Settings className="h-2.5 w-2.5" />
+              Settings
+            </p>
           </div>
-        </div>
+        </Link>
       </div>
     </header>
   );

@@ -1,48 +1,39 @@
 import { NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
+import {
+  getSupabaseServerClient,
+  isSupabaseServerConfigured,
+} from "@/lib/supabase/server";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Public liveness probe used by Docker/the reverse proxy. Intentionally exposes
+ * only a coarse database status, never connection details or row contents.
+ */
 export async function GET() {
-  const configured = isSupabaseConfigured();
-  let dbStatus = "not_configured";
-  let latencyMs = 0;
-  let rowCount = 0;
+  const configured = isSupabaseServerConfigured();
+  let databaseStatus = configured ? "unknown" : "not_configured";
 
   if (configured) {
     const supabase = getSupabaseServerClient();
     if (supabase) {
-      const start = Date.now();
-      try {
-        const { count, error } = await supabase
-          .from("activities")
-          .select("*", { count: "exact", head: true });
-
-        latencyMs = Date.now() - start;
-        if (error) {
-          dbStatus = `error: ${error.message}`;
-        } else {
-          dbStatus = "connected";
-          rowCount = count ?? 0;
-        }
-      } catch (err: unknown) {
-        dbStatus = `unreachable: ${err instanceof Error ? err.message : String(err)}`;
-      }
+      const { error } = await supabase
+        .from("activities")
+        .select("id", { count: "exact", head: true });
+      databaseStatus = error ? "unreachable" : "connected";
     }
   }
 
-  return NextResponse.json({
-    status: dbStatus === "connected" ? "ok" : "degraded",
-    app: "Awarely (Life Context Assistant)",
-    database: {
-      provider: "Supabase PostgreSQL",
-      configured,
-      status: dbStatus,
-      latencyMs: dbStatus === "connected" ? latencyMs : undefined,
-      recordCount: rowCount,
+  const healthy = !configured || databaseStatus === "connected";
+
+  return NextResponse.json(
+    {
+      status: healthy ? "ok" : "degraded",
+      app: "Awarely (Life Context Assistant)",
+      database: databaseStatus,
+      timestamp: new Date().toISOString(),
     },
-    environment: process.env.NODE_ENV || "development",
-    timestamp: new Date().toISOString(),
-  });
+    { status: 200, headers: { "Cache-Control": "no-store" } }
+  );
 }

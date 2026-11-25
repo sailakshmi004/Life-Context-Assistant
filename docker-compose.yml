@@ -1,0 +1,85 @@
+services:
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    # Loopback-only. Direct mode reaches the app through Caddy; shared-proxy
+    # mode lets an existing Nginx/Caddy/Coolify instance reach 127.0.0.1:APP_PORT.
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    stop_grace_period: 10s
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      # e.g. awarely.203.0.113.10.sslip.io (auto HTTPS) or :80 (plain HTTP)
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  scheduler:
+    image: curlimages/curl:8.10.1
+    restart: unless-stopped
+    stop_grace_period: 10s
+    depends_on:
+      app:
+        condition: service_healthy
+    env_file:
+      - .env
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        echo "Scheduler started; syncing every 10 minutes.";
+        while true; do curl --max-time 120 --retry 3 --retry-delay 15 --retry-connrefused -fsS -X POST -H "x-cron-secret: $${CRON_SECRET}" http://app:3000/api/notifications/sync >/dev/null && echo "sync ok $(date -u +%FT%TZ)" || echo "sync failed $(date -u +%FT%TZ)"; sleep 600; done
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:

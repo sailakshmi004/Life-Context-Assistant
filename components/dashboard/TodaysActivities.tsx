@@ -1,5 +1,5 @@
 import React from "react";
-import { Clock, ShieldAlert, Calendar, Plus, CheckCircle2, ShieldCheck } from "lucide-react";
+import { Clock, ShieldAlert, Calendar, Plus, ShieldCheck, MapPin } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +10,11 @@ import { ActivityListSkeleton } from "@/components/activities/ActivitySkeleton";
 interface TodaysActivitiesProps {
   activities: Activity[];
   isLoading?: boolean;
+  title?: string;
+  description?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  headerAction?: React.ReactNode;
   onAddClick?: () => void;
   onEdit?: (activity: Activity) => void;
   onDelete?: (activity: Activity) => void;
@@ -19,6 +24,11 @@ interface TodaysActivitiesProps {
 export function TodaysActivities({
   activities,
   isLoading = false,
+  title = "Tracked Activities",
+  description = "Activities stored in PostgreSQL and tracked with context-aware conditions",
+  emptyTitle = "No activities found",
+  emptyDescription = "Start by scheduling an outdoor or household task like drying clothes or washing the car.",
+  headerAction,
   onAddClick,
   onEdit,
   onDelete,
@@ -42,18 +52,19 @@ export function TodaysActivities({
   return (
     <Card className="h-full flex flex-col">
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-brand-600" />
-            <CardTitle>Tracked Activities</CardTitle>
+            <CardTitle>{title}</CardTitle>
           </div>
-          <span className="text-xs font-semibold text-slate-500">
-            {activities.length} total
-          </span>
+          <div className="flex items-center gap-2">
+            {headerAction}
+            <span className="text-xs font-semibold text-slate-500">
+              {activities.length} shown
+            </span>
+          </div>
         </div>
-        <CardDescription>
-          Activities stored in PostgreSQL and tracked with context-aware conditions
-        </CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
 
       <div className="flex-1">
@@ -65,10 +76,10 @@ export function TodaysActivities({
               <Calendar className="h-6 w-6" />
             </div>
             <h4 className="text-sm font-semibold text-slate-800">
-              No activities found
+              {emptyTitle}
             </h4>
             <p className="mt-1 text-xs text-slate-500 max-w-xs">
-              Start by scheduling an outdoor or household task like drying clothes or washing the car.
+              {emptyDescription}
             </p>
             {onAddClick && (
               <Button
@@ -119,11 +130,17 @@ export function TodaysActivities({
                     </p>
                   )}
 
-                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {formatTimeDisplay(activity.startTime)} ({activity.durationMinutes} mins)
                     </span>
+                    {activity.location && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {activity.location}
+                      </span>
+                    )}
                   </div>
                 </div>
 

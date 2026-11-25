@@ -1,5 +1,6 @@
 import { DailyForecast, HourlyForecast, WeatherContextData, WeatherSummary } from "@/types";
-import { mockWeather } from "@/lib/mock-data";
+import { fallbackWeather } from "@/lib/fallback-data";
+import { log } from "@/lib/log";
 
 /**
  * Checks whether WeatherAPI credentials are configured.
@@ -20,62 +21,85 @@ const weatherCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 /**
- * Generates synthetic 24-hour mock forecast for offline/fallback mode.
+ * Fetches weather with a small retry for transient network/5xx failures.
+ * Client errors (4xx) are returned immediately because retrying will not help.
+ */
+async function fetchWeatherWithRetry(url: string): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (response.ok || response.status < 500) return response;
+      lastError = new Error(`WeatherAPI responded with HTTP ${response.status}`);
+    } catch (err: unknown) {
+      lastError = err;
+    }
+
+    if (attempt === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("WeatherAPI request failed");
+}
+
+/**
+ * Neutral placeholder forecast for offline/fallback mode.
+ *
+ * It deliberately reports 0% rain and an "Unavailable" condition. Alert
+ * generation skips non-live data, so this can never fabricate a rain warning.
  */
 function generateFallbackForecast(location: string): WeatherContextData {
   const now = new Date();
-  const currentHour = now.getHours();
-
   const hours: HourlyForecast[] = Array.from({ length: 24 }).map((_, i) => {
     const hourDate = new Date(now);
     hourDate.setHours(i, 0, 0, 0);
-
-    // Create an afternoon rain peak between 14:00 (2 PM) and 17:00 (5 PM)
-    const isRainWindow = i >= 14 && i <= 17;
-    const chance = isRainWindow ? 75 : i >= 12 && i <= 19 ? 35 : 10;
-
     return {
       time: hourDate.toISOString(),
       timeEpoch: Math.floor(hourDate.getTime() / 1000),
-      tempC: isRainWindow ? 22 : 24 - Math.abs(14 - i) * 0.8,
-      condition: isRainWindow ? "Light Rain Showers" : i > 6 && i < 19 ? "Partly Cloudy" : "Clear",
-      chanceOfRain: chance,
-      precipMm: isRainWindow ? 2.5 : 0,
-      humidity: isRainWindow ? 82 : 65,
-      windSpeedKmh: 14,
-      feelsLikeC: isRainWindow ? 22 : 25,
+      tempC: 0,
+      condition: "Unavailable",
+      chanceOfRain: 0,
+      precipMm: 0,
+      humidity: 0,
+      windSpeedKmh: 0,
+      feelsLikeC: 0,
     };
   });
 
-  const daily: DailyForecast = {
-    date: now.toISOString().split("T")[0],
-    maxTempC: 26,
-    minTempC: 18,
-    chanceOfRain: 75,
-    condition: "Scattered Showers",
-    hours,
-  };
-
   const currentSummary: WeatherSummary = {
-    location: location || mockWeather.location,
-    region: "Metropolitan Area",
-    country: "US",
-    condition: currentHour >= 14 && currentHour <= 17 ? "Light Rain Showers" : "Partly Cloudy",
-    temperatureC: 24,
-    feelsLikeC: 25,
-    precipitationProbability: currentHour >= 14 && currentHour <= 17 ? 75 : 30,
-    humidity: 72,
-    windSpeedKmh: 14,
-    updatedAt: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-    forecastNote: "Scattered showers predicted between 2:00 PM and 5:00 PM today.",
+    location: location || fallbackWeather.location,
+    region: "—",
+    country: "—",
+    condition: "Weather unavailable",
+    temperatureC: 0,
+    feelsLikeC: 0,
+    precipitationProbability: 0,
+    humidity: 0,
+    windSpeedKmh: 0,
+    updatedAt: "—",
+    forecastNote:
+      "Live weather is unavailable. Add a valid WEATHER_API_KEY or retry later. Alerts are not generated from fallback data.",
   };
 
   return {
     location: currentSummary.location,
-    region: "Metropolitan Area",
-    country: "US",
+    region: "—",
+    country: "—",
     current: currentSummary,
-    forecast: [daily],
+    forecast: [
+      {
+        date: now.toISOString().split("T")[0],
+        maxTempC: 0,
+        minTempC: 0,
+        chanceOfRain: 0,
+        condition: "Unavailable",
+        hours,
+      },
+    ],
     isLive: false,
     cachedAt: new Date().toISOString(),
   };
@@ -100,9 +124,7 @@ export async function getWeatherForecast(
   const apiKey = process.env.WEATHER_API_KEY;
 
   if (!isWeatherApiConfigured() || !apiKey) {
-    const fallback = generateFallbackForecast(normalizedLoc);
-    weatherCache.set(cacheKey, { data: fallback, timestamp: Date.now() });
-    return fallback;
+    return generateFallbackForecast(normalizedLoc);
   }
 
   try {
@@ -110,19 +132,17 @@ export async function getWeatherForecast(
       apiKey
     )}&q=${encodeURIComponent(normalizedLoc)}&days=2&aqi=no&alerts=no`;
 
-    const res = await fetch(url, {
-      next: { revalidate: 900 }, // 15 minutes Next.js ISR cache
-    });
+    const res = await fetchWeatherWithRetry(url);
 
     if (!res.ok) {
-      console.warn(`[WeatherAPI] API returned status ${res.status}. Using fallback forecast.`);
+      log("warn", "weather", `WeatherAPI returned status ${res.status}; using fallback`);
       return generateFallbackForecast(normalizedLoc);
     }
 
     const data = await res.json();
 
     if (data.error) {
-      console.warn(`[WeatherAPI] API error: ${data.error.message}`);
+      log("warn", "weather", `WeatherAPI error: ${data.error.message}`);
       return generateFallbackForecast(normalizedLoc);
     }
 
@@ -219,7 +239,9 @@ export async function getWeatherForecast(
     weatherCache.set(cacheKey, { data: result, timestamp: Date.now() });
     return result;
   } catch (err: unknown) {
-    console.error("[WeatherAPI] Exception fetching forecast:", err);
+    log("error", "weather", "Exception fetching forecast; using fallback", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return generateFallbackForecast(normalizedLoc);
   }
 }

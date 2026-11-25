@@ -6,9 +6,13 @@ import { Reminder } from "@/types";
 
 interface UpcomingRemindersProps {
   reminders: Reminder[];
+  isLoading?: boolean;
 }
 
-export function UpcomingReminders({ reminders }: UpcomingRemindersProps) {
+export function UpcomingReminders({
+  reminders,
+  isLoading = false,
+}: UpcomingRemindersProps) {
   const getPriorityBadge = (priority: Reminder["priority"]) => {
     switch (priority) {
       case "high":
@@ -38,11 +42,38 @@ export function UpcomingReminders({ reminders }: UpcomingRemindersProps) {
       </CardHeader>
 
       <div className="space-y-3">
-        {reminders.map((reminder) => (
-          <div
-            key={reminder.id}
-            className="flex items-start gap-3 rounded-lg border border-slate-100 p-3 transition-colors hover:bg-slate-50/70"
-          >
+        {isLoading && (
+          <>
+            {[0, 1].map((item) => (
+              <div
+                key={item}
+                className="h-14 animate-pulse rounded-lg border border-slate-100 bg-slate-50"
+              />
+            ))}
+          </>
+        )}
+
+        {!isLoading && reminders.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+              <Bell className="h-5 w-5" />
+            </div>
+            <p className="text-sm font-semibold text-slate-800">
+              No reminders queued
+            </p>
+            <p className="mt-0.5 max-w-xs text-xs text-slate-500">
+              Reminders appear here during the hour before a scheduled activity
+              begins.
+            </p>
+          </div>
+        )}
+
+        {!isLoading &&
+          reminders.map((reminder) => (
+            <div
+              key={reminder.id}
+              className="flex items-start gap-3 rounded-lg border border-slate-100 p-3 transition-colors hover:bg-slate-50/70"
+            >
             <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
               {reminder.isWeatherAlert ? (
                 <CloudRain className="h-4 w-4 text-brand-600" />

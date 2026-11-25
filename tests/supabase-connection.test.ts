@@ -1,12 +1,14 @@
-import { getSupabaseServerClient } from "../lib/supabase/server";
-import { isSupabaseConfigured } from "../lib/supabase/client";
+import {
+  getSupabaseServerClient,
+  isSupabaseServerConfigured,
+} from "../lib/supabase/server";
 import { activityRepository } from "../lib/supabase/activities";
 
 export async function testSupabaseIntegration() {
   console.log("=== Awarely Supabase Integration Verification ===");
 
   // 1. Check client configuration
-  const configured = isSupabaseConfigured();
+  const configured = isSupabaseServerConfigured();
   console.log("1. Supabase configured:", configured ? "YES" : "NO");
   if (!configured) {
     throw new Error("Supabase is not configured in .env / .env.local");

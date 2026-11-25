@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { activityRepository } from "@/lib/supabase/activities";
+import { notificationRepository } from "@/lib/supabase/notifications";
 import { validateUpdateActivityInput } from "@/lib/validations/activity";
+import { log } from "@/lib/log";
+import { publicErrorMessage } from "@/lib/api/error";
 
 export const dynamic = "force-dynamic";
 
@@ -41,8 +44,7 @@ export async function GET(
     );
   } catch (error: unknown) {
     console.error(`[GET /api/activities/${params.id}] Error:`, error);
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch activity";
+    const message = publicErrorMessage(error, "Failed to fetch activity");
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -98,6 +100,27 @@ export async function PATCH(
       );
     }
 
+    // Notifications are side effects: a failure here must not fail the update.
+    if (
+      validation.data.status === "completed" ||
+      validation.data.status === "cancelled"
+    ) {
+      try {
+        if (validation.data.status === "completed") {
+          await notificationRepository.createCompletion(updated);
+        }
+        await notificationRepository.dismissActiveForActivity(updated.id);
+      } catch (notificationError: unknown) {
+        log("error", "activities", "Notification side effect failed", {
+          activityId: updated.id,
+          error:
+            notificationError instanceof Error
+              ? notificationError.message
+              : String(notificationError),
+        });
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -108,8 +131,7 @@ export async function PATCH(
     );
   } catch (error: unknown) {
     console.error(`[PATCH /api/activities/${params.id}] Error:`, error);
-    const message =
-      error instanceof Error ? error.message : "Failed to update activity";
+    const message = publicErrorMessage(error, "Failed to update activity");
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -154,8 +176,7 @@ export async function DELETE(
     );
   } catch (error: unknown) {
     console.error(`[DELETE /api/activities/${params.id}] Error:`, error);
-    const message =
-      error instanceof Error ? error.message : "Failed to delete activity";
+    const message = publicErrorMessage(error, "Failed to delete activity");
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

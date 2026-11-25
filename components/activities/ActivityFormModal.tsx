@@ -12,7 +12,44 @@ import {
   UpdateActivityInput,
 } from "@/types";
 import { VALID_CATEGORIES, VALID_STATUSES } from "@/lib/validations/activity";
-import { Sparkles, Calendar, Clock, AlertCircle } from "lucide-react";
+import {
+  getRuleTypesForActivity,
+  RULE_LABELS,
+} from "@/lib/rules/registry";
+import { Sparkles, Calendar, Clock, AlertCircle, MapPin } from "lucide-react";
+
+const pad = (value: number) => value.toString().padStart(2, "0");
+
+function toLocalInputValue(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** Formats an ISO string for input[type="datetime-local"]. */
+function toDateTimeLocal(isoString?: string): string {
+  if (!isoString) {
+    const date = new Date();
+    date.setHours(date.getHours() + 1, 0, 0, 0);
+    return toLocalInputValue(date);
+  }
+  const date = new Date(isoString);
+  return isNaN(date.getTime()) ? "" : toLocalInputValue(date);
+}
+
+function addMinutes(value: string, minutes: number): string {
+  const date = new Date(value);
+  if (isNaN(date.getTime()) || !Number.isFinite(minutes)) return "";
+  date.setMinutes(date.getMinutes() + minutes);
+  return toLocalInputValue(date);
+}
+
+function minutesBetween(start: string, end: string): number | null {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return null;
+  return Math.round((endDate.getTime() - startDate.getTime()) / 60000);
+}
 
 export interface ActivityFormModalProps {
   isOpen: boolean;
@@ -37,50 +74,42 @@ export function ActivityFormModal({
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
   const [category, setCategory] = useState<ActivityCategory>("household");
   const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [monitoringEnabled, setMonitoringEnabled] = useState(true);
   const [status, setStatus] = useState<ActivityStatus>("pending");
   const [errors, setErrors] = useState<ActivityValidationErrors>({});
 
-  // Helper to format an ISO string for input[type="datetime-local"]
-  const toDateTimeLocal = (isoString?: string): string => {
-    if (!isoString) {
-      // Default to today at next rounded hour
-      const d = new Date();
-      d.setHours(d.getHours() + 1, 0, 0, 0);
-      const pad = (n: number) => n.toString().padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    }
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return "";
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  };
-
   useEffect(() => {
-    if (isOpen) {
-      if (initialData) {
-        setTitle(initialData.title);
-        setDescription(initialData.description || "");
-        setCategory(initialData.category);
-        setStartTime(toDateTimeLocal(initialData.startTime));
-        setDurationMinutes(initialData.durationMinutes);
-        setMonitoringEnabled(initialData.monitoringEnabled ?? true);
-        setStatus(initialData.status);
-      } else {
-        // Reset to clean defaults
-        setTitle("");
-        setDescription("");
-        setCategory("household");
-        setStartTime(toDateTimeLocal());
-        setDurationMinutes(60);
-        setMonitoringEnabled(true);
-        setStatus("pending");
-      }
-      setErrors({});
+    if (!isOpen) return;
+
+    if (initialData) {
+      const start = toDateTimeLocal(initialData.startTime);
+      setTitle(initialData.title);
+      setDescription(initialData.description || "");
+      setLocation(initialData.location || "");
+      setCategory(initialData.category);
+      setStartTime(start);
+      setDurationMinutes(initialData.durationMinutes);
+      setEndTime(addMinutes(start, initialData.durationMinutes));
+      setMonitoringEnabled(initialData.monitoringEnabled ?? true);
+      setStatus(initialData.status);
+    } else {
+      const start = toDateTimeLocal();
+      setTitle("");
+      setDescription("");
+      setLocation("");
+      setCategory("household");
+      setStartTime(start);
+      setDurationMinutes(60);
+      setEndTime(addMinutes(start, 60));
+      setMonitoringEnabled(true);
+      setStatus("pending");
     }
+    setErrors({});
   }, [isOpen, initialData]);
 
   const validate = (): boolean => {
@@ -100,6 +129,18 @@ export function ActivityFormModal({
 
     if (!startTime) {
       newErrors.startTime = "Start time is required.";
+    } else if (!endTime) {
+      newErrors.startTime = "End time is required.";
+    } else if (minutesBetween(startTime, endTime) === null) {
+      newErrors.startTime = "Start and end time must be valid.";
+    } else if (
+      (minutesBetween(startTime, endTime) as number) <= 0
+    ) {
+      newErrors.startTime = "End time must be after start time.";
+    }
+
+    if (location.trim().length > 120) {
+      newErrors.location = "Location cannot exceed 120 characters.";
     }
 
     setErrors(newErrors);
@@ -120,6 +161,7 @@ export function ActivityFormModal({
     await onSubmit({
       title: title.trim(),
       description: description.trim() || null,
+      location: location.trim() || null,
       category,
       startTime: finalStartTime,
       durationMinutes: Number(durationMinutes),
@@ -127,6 +169,8 @@ export function ActivityFormModal({
       status,
     });
   };
+
+  const applicableRules = getRuleTypesForActivity({ title, category });
 
   return (
     <Modal
@@ -149,12 +193,18 @@ export function ActivityFormModal({
 
         {/* Title */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700">
+          <label
+            htmlFor="activity-title"
+            className="block text-xs font-semibold text-slate-700"
+          >
             Activity Title <span className="text-rose-500">*</span>
           </label>
           <input
+            id="activity-title"
             type="text"
             required
+            aria-invalid={Boolean(errors.title)}
+            aria-describedby={errors.title ? "activity-title-error" : undefined}
             placeholder="e.g. Drying Clothes, Outdoor Run, Lawn Mowing"
             value={title}
             onChange={(e) => {
@@ -164,16 +214,22 @@ export function ActivityFormModal({
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
           {errors.title && (
-            <p className="mt-1 text-xs text-rose-600">{errors.title}</p>
+            <p id="activity-title-error" className="mt-1 text-xs text-rose-600">
+              {errors.title}
+            </p>
           )}
         </div>
 
         {/* Description */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700">
+          <label
+            htmlFor="activity-description"
+            className="block text-xs font-semibold text-slate-700"
+          >
             Description / Notes (Optional)
           </label>
           <textarea
+            id="activity-description"
             rows={2}
             placeholder="e.g. Hang washing on backyard line"
             value={description}
@@ -182,13 +238,52 @@ export function ActivityFormModal({
           />
         </div>
 
+        {/* Location */}
+        <div>
+          <label
+            htmlFor="activity-location"
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-700"
+          >
+            <MapPin className="h-3.5 w-3.5 text-slate-400" />
+            Location (Optional)
+          </label>
+          <input
+            id="activity-location"
+            type="text"
+            aria-invalid={Boolean(errors.location)}
+            aria-describedby={
+              errors.location ? "activity-location-error" : undefined
+            }
+            placeholder="City, postcode, or lat,long — defaults to Settings"
+            value={location}
+            onChange={(e) => {
+              setLocation(e.target.value);
+              if (errors.location)
+                setErrors((prev) => ({ ...prev, location: undefined }));
+            }}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          />
+          {errors.location && (
+            <p
+              id="activity-location-error"
+              className="mt-1 text-xs text-rose-600"
+            >
+              {errors.location}
+            </p>
+          )}
+        </div>
+
         {/* Category & Status Grid */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="block text-xs font-semibold text-slate-700">
+            <label
+              htmlFor="activity-category"
+              className="block text-xs font-semibold text-slate-700"
+            >
               Category <span className="text-rose-500">*</span>
             </label>
             <select
+              id="activity-category"
               value={category}
               onChange={(e) => setCategory(e.target.value as ActivityCategory)}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -202,10 +297,14 @@ export function ActivityFormModal({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700">
+            <label
+              htmlFor="activity-status"
+              className="block text-xs font-semibold text-slate-700"
+            >
               Status
             </label>
             <select
+              id="activity-status"
               value={status}
               onChange={(e) => setStatus(e.target.value as ActivityStatus)}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -221,42 +320,101 @@ export function ActivityFormModal({
           </div>
         </div>
 
-        {/* Start Time & Duration Grid */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* Start / End / Duration Grid */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <label className="block text-xs font-semibold text-slate-700">
+            <label
+              htmlFor="activity-start"
+              className="block text-xs font-semibold text-slate-700"
+            >
               Start Date & Time <span className="text-rose-500">*</span>
             </label>
-            <div className="relative mt-1">
-              <input
-                type="datetime-local"
-                required
-                value={startTime}
-                onChange={(e) => {
-                  setStartTime(e.target.value);
-                  if (errors.startTime)
-                    setErrors((prev) => ({ ...prev, startTime: undefined }));
-                }}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
-            </div>
+            <input
+              id="activity-start"
+              type="datetime-local"
+              required
+              aria-invalid={Boolean(errors.startTime)}
+              aria-describedby={
+                errors.startTime ? "activity-start-error" : undefined
+              }
+              value={startTime}
+              onChange={(e) => {
+                const value = e.target.value;
+                setStartTime(value);
+                if (value) {
+                  setEndTime(
+                    addMinutes(
+                      value,
+                      durationMinutes > 0 ? durationMinutes : 60
+                    )
+                  );
+                }
+                if (errors.startTime)
+                  setErrors((prev) => ({ ...prev, startTime: undefined }));
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
             {errors.startTime && (
-              <p className="mt-1 text-xs text-rose-600">{errors.startTime}</p>
+              <p id="activity-start-error" className="mt-1 text-xs text-rose-600">
+                {errors.startTime}
+              </p>
             )}
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700">
+            <label
+              htmlFor="activity-end"
+              className="block text-xs font-semibold text-slate-700"
+            >
+              End Date & Time <span className="text-rose-500">*</span>
+            </label>
+            <input
+              id="activity-end"
+              type="datetime-local"
+              required
+              aria-invalid={Boolean(errors.startTime)}
+              aria-describedby={
+                errors.startTime ? "activity-start-error" : undefined
+              }
+              value={endTime}
+              onChange={(e) => {
+                const value = e.target.value;
+                setEndTime(value);
+                const diff = minutesBetween(startTime, value);
+                if (diff !== null && diff > 0) {
+                  setDurationMinutes(diff);
+                }
+                if (errors.startTime)
+                  setErrors((prev) => ({ ...prev, startTime: undefined }));
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="activity-duration"
+              className="block text-xs font-semibold text-slate-700"
+            >
               Duration (Minutes) <span className="text-rose-500">*</span>
             </label>
             <input
+              id="activity-duration"
               type="number"
               min="5"
               step="5"
               required
+              aria-invalid={Boolean(errors.durationMinutes)}
+              aria-describedby={
+                errors.durationMinutes ? "activity-duration-error" : undefined
+              }
               value={durationMinutes}
               onChange={(e) => {
-                setDurationMinutes(Number(e.target.value));
+                const value = Number(e.target.value);
+                setDurationMinutes(value);
+                if (startTime && Number.isFinite(value) && value > 0) {
+                  setEndTime(addMinutes(startTime, value));
+                }
                 if (errors.durationMinutes)
                   setErrors((prev) => ({
                     ...prev,
@@ -266,7 +424,10 @@ export function ActivityFormModal({
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
             {errors.durationMinutes && (
-              <p className="mt-1 text-xs text-rose-600">
+              <p
+                id="activity-duration-error"
+                className="mt-1 text-xs text-rose-600"
+              >
                 {errors.durationMinutes}
               </p>
             )}
@@ -289,6 +450,25 @@ export function ActivityFormModal({
               <p className="text-[11px] text-slate-500 mt-0.5">
                 When enabled, Awarely cross-references external forecasts with this activity’s time slot.
               </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-medium text-slate-500">
+                  Weather checks:
+                </span>
+                {applicableRules.length > 0 ? (
+                  applicableRules.map((rule) => (
+                    <span
+                      key={rule}
+                      className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700"
+                    >
+                      {RULE_LABELS[rule]}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[10px] text-slate-500">
+                    none for this activity type
+                  </span>
+                )}
+              </div>
             </div>
           </label>
         </div>

@@ -42,3 +42,22 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
+
+  docker:
+    name: Docker build & Compose validation
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create CI environment file
+        run: cp .env.example .env
+
+      - name: Validate Docker Compose configuration
+        run: docker compose --env-file .env config >/dev/null
+
+      - name: Build production Docker image
+        run: docker build --tag awarely:ci .

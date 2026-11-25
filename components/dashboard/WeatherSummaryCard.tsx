@@ -41,6 +41,7 @@ export function WeatherSummaryCard({
   isLoading = false,
 }: WeatherSummaryCardProps) {
   const isRainRisk = weather.precipitationProbability >= 40;
+  const isUnavailable = weather.condition.toLowerCase().includes("unavailable");
 
   return (
     <Card className="h-full">
@@ -66,7 +67,7 @@ export function WeatherSummaryCard({
 
           <div className="flex items-center gap-2">
             <Badge variant={isLive ? "success" : "info"}>
-              {isLive ? "Live WeatherAPI" : "Mock Weather"}
+              {isLive ? "Live WeatherAPI" : "Fallback data"}
             </Badge>
 
             {onRefresh && (
@@ -85,8 +86,13 @@ export function WeatherSummaryCard({
           </div>
         </div>
         <CardDescription>
-          Real-time conditions influencing scheduled activity recommendations
+          Preview conditions for any city. Alerts use each activity&apos;s
+          location or your default from Settings.
         </CardDescription>
+        <p className="text-[11px] text-slate-500">
+          Changing this dropdown only changes the preview — not your alert
+          location.
+        </p>
       </CardHeader>
 
       <div className="mt-2 space-y-4">
@@ -168,10 +174,18 @@ export function WeatherSummaryCard({
             </div>
             <p
               className={`mt-1 text-sm font-semibold ${
-                isRainRisk ? "text-amber-700" : "text-emerald-700"
+                isUnavailable
+                  ? "text-slate-500"
+                  : isRainRisk
+                  ? "text-amber-700"
+                  : "text-emerald-700"
               }`}
             >
-              {isRainRisk ? "Rain Inbound" : "Optimal Skies"}
+              {isUnavailable
+                ? "No data"
+                : isRainRisk
+                ? "Rain Inbound"
+                : "Optimal Skies"}
             </p>
           </div>
         </div>

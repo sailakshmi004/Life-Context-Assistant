@@ -1,35 +1,38 @@
 import { testActivityValidation } from "./activity-validation.test";
 import { testContextRulesEngine } from "./rules-engine.test";
+import { testNotificationEngine } from "./notifications-engine.test";
+import { testNotificationTransitions } from "./notification-transitions.test";
+import { testWeatherRules } from "./weather-rules.test";
+import { testAuthSecurity } from "./auth-security.test";
+import { testSingleFlight } from "./single-flight.test";
 
-function main() {
-  console.log("Running Awarely Verification Test Suite (Phases 1-3)...\n");
+type TestResult = { test: string; passed: boolean; error?: string };
 
-  let total = 0;
-  let passed = 0;
+let total = 0;
+let passed = 0;
 
-  // 1. Context Rules Engine Tests
-  const ruleResults = testContextRulesEngine();
-  for (const r of ruleResults) {
+function report(group: string, results: TestResult[]) {
+  for (const result of results) {
     total++;
-    if (r.passed) {
+    if (result.passed) {
       passed++;
-      console.log(`✔ Rules Engine: ${r.test}`);
+      console.log(`✔ ${group}: ${result.test}`);
     } else {
-      console.error(`❌ Rules Engine: ${r.test} - ${r.error}`);
+      console.error(`❌ ${group}: ${result.test} - ${result.error}`);
     }
   }
+}
 
-  // 2. Activity Validation Tests
-  const validationResults = testActivityValidation();
-  for (const r of validationResults) {
-    total++;
-    if (r.passed) {
-      passed++;
-      console.log(`✔ Activity Validation: ${r.test}`);
-    } else {
-      console.error(`❌ Activity Validation: ${r.test} - ${r.error}`);
-    }
-  }
+async function main() {
+  console.log("Running Awarely Verification Test Suite...\n");
+
+  report("Rules Engine", testContextRulesEngine());
+  report("Activity Validation", testActivityValidation());
+  report("Notifications", testNotificationEngine());
+  report("Weather rules", testWeatherRules());
+  report("Transitions", testNotificationTransitions());
+  report("Auth & security", await testAuthSecurity());
+  report("Single-flight", await testSingleFlight());
 
   console.log(`\nResults: ${passed}/${total} tests passed.`);
   if (passed !== total) {
@@ -37,4 +40,7 @@ function main() {
   }
 }
 
-main();
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
