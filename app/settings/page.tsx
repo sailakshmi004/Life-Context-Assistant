@@ -410,6 +410,17 @@ export default function SettingsPage() {
                 </div>
               )}
 
+              {pushState?.permission === "denied" && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-900">
+                  <p className="font-semibold">Notifications are blocked</p>
+                  <p className="mt-1 text-[11px] leading-relaxed">
+                    Click the padlock/tune icon in your browser’s address bar →
+                    Notifications → Allow, then reload this page. On iPhone,
+                    install the site to your Home Screen first.
+                  </p>
+                </div>
+              )}
+
               <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
                 <div>
                   <p className="font-semibold text-slate-800">
@@ -477,8 +488,8 @@ export default function SettingsPage() {
               )}
 
               <p className="text-[11px] text-slate-500">
-                Notifications are delivered by the scheduler container every 10
-                minutes. Keep the server running for reliable delivery.
+                The background scheduler runs every 10 minutes. Keep the server
+                running for reliable delivery.
               </p>
             </div>
           </Card>

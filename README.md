@@ -259,6 +259,7 @@ Nginx + Certbot + cron, with the same `.env` and Supabase database.
 | Weather always fallback | Invalid/quota-limited `WEATHER_API_KEY` |
 | No alert for an activity | Monitoring off, no overlapping rule, or activity outside the 2-day forecast |
 | No push | HTTPS/localhost, permission granted, VAPID keys configured |
+| “Notifications are blocked” | Allow notifications for the site in browser site settings, then reload |
 | Scheduler not syncing | `docker compose logs scheduler`; verify `CRON_SECRET` |
 | Port 80/443 in use | Use shared-proxy mode with `APP_PORT`, or free ports |
 

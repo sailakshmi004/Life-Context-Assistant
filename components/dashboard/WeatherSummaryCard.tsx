@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   CloudRain,
   Droplets,
@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Sun,
   Cloud,
+  Search,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -24,15 +25,6 @@ interface WeatherSummaryCardProps {
   isLoading?: boolean;
 }
 
-const COMMON_LOCATIONS = [
-  "Hyderabad",
-  "London",
-  "New York",
-  "San Francisco",
-  "Tokyo",
-  "Sydney",
-];
-
 export function WeatherSummaryCard({
   weather,
   isLive = false,
@@ -40,30 +32,67 @@ export function WeatherSummaryCard({
   onRefresh,
   isLoading = false,
 }: WeatherSummaryCardProps) {
+  const [locationInput, setLocationInput] = useState(weather.location);
   const isRainRisk = weather.precipitationProbability >= 40;
   const isUnavailable = weather.condition.toLowerCase().includes("unavailable");
+
+  useEffect(() => {
+    setLocationInput(weather.location);
+  }, [weather.location]);
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const next = locationInput.trim();
+    if (next && onLocationChange) onLocationChange(next);
+  };
+
+  if (isLoading && !isLive) {
+    return (
+      <Card className="h-full">
+        <CardHeader className="pb-3">
+          <CardTitle>Weather context</CardTitle>
+          <CardDescription>Loading the latest forecast…</CardDescription>
+        </CardHeader>
+        <div className="space-y-4">
+          <div className="h-28 animate-pulse rounded-xl bg-slate-100" />
+          <div className="grid grid-cols-3 gap-3">
+            <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
+            <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
+            <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
+          </div>
+          <div className="h-12 animate-pulse rounded-lg bg-slate-100" />
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-brand-600" />
-            <select
-              value={weather.location}
-              onChange={(e) => onLocationChange?.(e.target.value)}
-              className="font-semibold text-slate-900 bg-transparent text-sm border-b border-transparent hover:border-slate-300 focus:border-brand-500 focus:outline-none cursor-pointer"
+          <form
+            onSubmit={handleSubmit}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1"
+          >
+            <MapPin className="h-4 w-4 shrink-0 text-brand-600" />
+            <input
+              type="text"
+              value={locationInput}
+              onChange={(event) => setLocationInput(event.target.value)}
+              placeholder="City or lat,long"
+              aria-label="Weather preview location"
+              className="w-32 bg-transparent text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none sm:w-40"
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !locationInput.trim()}
+              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+              title="Search weather for this location"
+              aria-label="Search weather for this location"
             >
-              {COMMON_LOCATIONS.map((loc) => (
-                <option key={loc} value={loc}>
-                  {loc}
-                </option>
-              ))}
-              {!COMMON_LOCATIONS.includes(weather.location) && (
-                <option value={weather.location}>{weather.location}</option>
-              )}
-            </select>
-          </div>
+              <Search className="h-3.5 w-3.5" />
+            </button>
+          </form>
 
           <div className="flex items-center gap-2">
             <Badge variant={isLive ? "success" : "info"}>
@@ -86,12 +115,11 @@ export function WeatherSummaryCard({
           </div>
         </div>
         <CardDescription>
-          Preview conditions for any city. Alerts use each activity&apos;s
-          location or your default from Settings.
+          Search any city for a preview. Alerts use each activity&apos;s location
+          or your default from Settings.
         </CardDescription>
         <p className="text-[11px] text-slate-500">
-          Changing this dropdown only changes the preview — not your alert
-          location.
+          Changing this preview does not change your alert location.
         </p>
       </CardHeader>
 

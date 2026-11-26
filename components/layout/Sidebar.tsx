@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -12,7 +12,7 @@ import {
   Sparkles,
   ShieldCheck,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 
 interface SidebarProps {
   onCloseMobile?: () => void;
@@ -53,6 +53,37 @@ const navItems = [
 
 export function Sidebar({ onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [lastSyncStatus, setLastSyncStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      try {
+        const response = await fetch("/api/settings");
+        const json = await response.json();
+        if (active && response.ok && json.success) {
+          setLastSyncAt(json.data.lastSyncAt ?? null);
+          setLastSyncStatus(json.data.lastSyncStatus ?? null);
+        }
+      } catch {
+        /* status widget is non-critical */
+      }
+    };
+
+    load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const syncHealthy = lastSyncStatus !== "error";
+  const statusLabel = lastSyncAt
+    ? `Last check ${formatRelativeTime(lastSyncAt)}`
+    : "Waiting for first check";
 
   return (
     <aside className="flex h-full w-64 flex-col border-r border-slate-200 bg-white">
@@ -133,9 +164,19 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
           <p className="mt-1 text-[11px] text-slate-500">
             Monitoring weather and external schedules automatically.
           </p>
-          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Context engine active
+          <div
+            className={cn(
+              "mt-2 flex items-center gap-1.5 text-[11px] font-medium",
+              syncHealthy ? "text-emerald-700" : "text-rose-700"
+            )}
+          >
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                syncHealthy ? "bg-emerald-500" : "bg-rose-500"
+              )}
+            />
+            {statusLabel}
           </div>
         </div>
       </div>

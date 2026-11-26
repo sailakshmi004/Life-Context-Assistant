@@ -7,6 +7,7 @@ interface WelcomeBannerProps {
   activitiesCount: number;
   alertsCount: number;
   rainChance: number;
+  isLoading?: boolean;
 }
 
 export function WelcomeBanner({
@@ -14,6 +15,7 @@ export function WelcomeBanner({
   activitiesCount,
   alertsCount,
   rainChance,
+  isLoading = false,
 }: WelcomeBannerProps) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -33,17 +35,23 @@ export function WelcomeBanner({
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
             <div className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
               <CalendarDays className="h-3.5 w-3.5 text-slate-500" />
-              <span>{activitiesCount} Activities Today</span>
+              <span>
+                {isLoading ? "…" : `${activitiesCount} Activities Today`}
+              </span>
             </div>
 
             <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 font-medium text-amber-800 border border-amber-200">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-              <span>{alertsCount} Attention Needed</span>
+              <span>
+                {isLoading ? "…" : `${alertsCount} Attention Needed`}
+              </span>
             </div>
 
             <div className="flex items-center gap-1.5 rounded-lg bg-sky-50 px-3 py-1.5 font-medium text-sky-800 border border-sky-200">
               <CloudRain className="h-3.5 w-3.5 text-sky-600" />
-              <span>{rainChance}% Rain Probability</span>
+              <span>
+                {isLoading ? "…" : `${rainChance}% Rain Probability`}
+              </span>
             </div>
           </div>
         </div>

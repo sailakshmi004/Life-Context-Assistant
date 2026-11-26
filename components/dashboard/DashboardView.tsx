@@ -372,7 +372,9 @@ export function DashboardView() {
             <Database className="h-4 w-4 text-brand-600 shrink-0" />
             <span>
               Database:{" "}
-              {isLiveSupabase ? (
+              {isLoading ? (
+                <span className="font-medium text-slate-500">Connecting…</span>
+              ) : isLiveSupabase ? (
                 <span className="font-semibold text-emerald-700">
                   Supabase connected
                 </span>
@@ -388,7 +390,9 @@ export function DashboardView() {
             <CloudSun className="h-4 w-4 text-sky-600 shrink-0" />
             <span>
               Weather:{" "}
-              {weatherData?.isLive ? (
+              {isWeatherLoading && !weatherData ? (
+                <span className="font-medium text-slate-500">Loading…</span>
+              ) : weatherData?.isLive ? (
                 <span className="font-semibold text-emerald-700">
                   Live ({weatherData.location})
                 </span>
@@ -407,7 +411,7 @@ export function DashboardView() {
             <span>
               Alerts:{" "}
               <span className="font-semibold text-slate-800">
-                {alerts.length}
+                {isNotificationsLoading ? "…" : alerts.length}
               </span>
             </span>
           </div>
@@ -454,6 +458,7 @@ export function DashboardView() {
         activitiesCount={todayCount}
         alertsCount={alerts.length}
         rainChance={activeWeather.precipitationProbability}
+        isLoading={isLoading}
       />
 
       <section aria-label="Attention Needed Section">

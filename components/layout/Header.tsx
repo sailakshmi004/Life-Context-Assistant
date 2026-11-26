@@ -74,7 +74,7 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
           >
             <Bell className="h-3.5 w-3.5 text-amber-600" />
             <span>
-              {unreadCount} alert{unreadCount === 1 ? "" : "s"} need attention
+              {unreadCount} unread notification{unreadCount === 1 ? "" : "s"}
             </span>
           </Link>
         )}
