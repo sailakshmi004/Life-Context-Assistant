@@ -4,6 +4,7 @@ import React from "react";
 import { Search, Filter, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { SelectMenu, type SelectOption } from "@/components/ui/SelectMenu";
 import { ActivityFacets } from "@/types";
 import { VALID_CATEGORIES, VALID_STATUSES } from "@/lib/validations/activity";
 
@@ -28,6 +29,13 @@ function titleCase(value: string): string {
     : value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+const STATUS_DOTS: Record<string, string> = {
+  pending: "bg-slate-400",
+  in_progress: "bg-sky-500",
+  completed: "bg-emerald-500",
+  cancelled: "bg-slate-300",
+};
+
 export function ActivityFilters({
   searchQuery,
   onSearchChange,
@@ -46,6 +54,34 @@ export function ActivityFilters({
     selectedStatus !== "all" ||
     timeScope !== "all";
 
+  const categoryOptions: SelectOption[] = [
+    {
+      value: "all",
+      label: "All categories",
+      count: facets?.total,
+    },
+    ...VALID_CATEGORIES.map((category) => ({
+      value: category,
+      label: titleCase(category),
+      count: facets?.categories[category],
+      disabled: Boolean(facets && facets.categories[category] === 0),
+    })),
+  ];
+
+  const statusOptions: SelectOption[] = [
+    { value: "all", label: "All statuses" },
+    ...VALID_STATUSES.map((status) => ({
+      value: status,
+      label: titleCase(status),
+      count: facets?.statuses[status],
+      disabled: Boolean(facets && facets.statuses[status] === 0),
+      dotClass: STATUS_DOTS[status],
+    })),
+  ];
+
+  const selectedStatusDot =
+    selectedStatus === "all" ? undefined : STATUS_DOTS[selectedStatus];
+
   return (
     <Card className="p-4">
       <div className="flex flex-col gap-3">
@@ -55,9 +91,10 @@ export function ActivityFilters({
             <input
               type="text"
               placeholder="Search by title, description, or location..."
+              aria-label="Search activities"
               value={searchQuery}
               onChange={(event) => onSearchChange(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 py-1.5 pl-9 pr-3 text-xs text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
 
@@ -67,14 +104,15 @@ export function ActivityFilters({
                 <button
                   key={scope}
                   type="button"
+                  aria-pressed={timeScope === scope}
                   onClick={() => onTimeScopeChange(scope)}
-                  className={`rounded-md px-2.5 py-1 capitalize transition-colors ${
+                  className={`rounded-md px-3 py-1.5 transition-colors ${
                     timeScope === scope
                       ? "bg-white text-slate-900 shadow-sm"
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  {scope}
+                  {scope === "all" ? "All time" : titleCase(scope)}
                 </button>
               ))}
             </div>
@@ -84,45 +122,24 @@ export function ActivityFilters({
               <span>Filters:</span>
             </div>
 
-            <select
+            <SelectMenu
               value={selectedCategory}
-              onChange={(event) => onCategoryChange(event.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              <option value="all">
-                All Categories{facets ? ` (${facets.total})` : ""}
-              </option>
-              {VALID_CATEGORIES.map((category) => {
-                const count = facets?.categories[category] ?? 0;
-                return (
-                  <option
-                    key={category}
-                    value={category}
-                    disabled={count === 0}
-                  >
-                    {titleCase(category)}
-                    {facets ? ` (${count})` : ""}
-                  </option>
-                );
-              })}
-            </select>
+              options={categoryOptions}
+              onChange={onCategoryChange}
+              ariaLabel="Filter by category"
+              menuClassName="w-52"
+              className="min-w-[8.5rem]"
+            />
 
-            <select
+            <SelectMenu
               value={selectedStatus}
-              onChange={(event) => onStatusChange(event.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              <option value="all">All Statuses</option>
-              {VALID_STATUSES.map((status) => {
-                const count = facets?.statuses[status] ?? 0;
-                return (
-                  <option key={status} value={status} disabled={count === 0}>
-                    {titleCase(status)}
-                    {facets ? ` (${count})` : ""}
-                  </option>
-                );
-              })}
-            </select>
+              options={statusOptions}
+              onChange={onStatusChange}
+              ariaLabel="Filter by status"
+              selectedDotClass={selectedStatusDot}
+              menuClassName="w-44"
+              className="min-w-[8rem]"
+            />
 
             {hasFilters && (
               <Button

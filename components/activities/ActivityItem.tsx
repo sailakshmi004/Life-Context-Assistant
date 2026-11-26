@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { StatusMenu } from "@/components/activities/StatusMenu";
 import { Activity, ActivityStatus } from "@/types";
 import { formatTimeDisplay } from "@/lib/utils";
 
@@ -46,8 +47,7 @@ export function ActivityItem({
     return `${timeDisplay} (${duration} mins)`;
   };
 
-  const handleStatusSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newStatus = e.target.value as ActivityStatus;
+  const handleStatusChange = async (newStatus: ActivityStatus) => {
     if (newStatus === activity.status) return;
 
     try {
@@ -131,28 +131,13 @@ export function ActivityItem({
 
       {/* Right Controls: Status Selector & Actions */}
       <div className="flex items-center justify-between gap-3 pt-2 sm:pt-0 sm:justify-end shrink-0">
-        {/* Status Dropdown */}
-        <div className="relative">
-          <select
-            value={activity.status}
-            disabled={isUpdatingStatus}
-            onChange={handleStatusSelect}
-            className={`rounded-lg border px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors ${
-              activity.status === "completed"
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                : activity.status === "in_progress"
-                ? "bg-sky-50 text-sky-700 border-sky-200"
-                : activity.status === "cancelled"
-                ? "bg-slate-100 text-slate-600 border-slate-200"
-                : "bg-slate-50 text-slate-700 border-slate-300"
-            }`}
-          >
-            <option value="pending">Pending</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
+        {/* Status Menu */}
+        <StatusMenu
+          value={activity.status}
+          onChange={handleStatusChange}
+          disabled={isUpdatingStatus || !onStatusChange}
+          activityTitle={activity.title}
+        />
 
         {/* Action Buttons: View, Edit and Delete */}
         <div className="flex items-center gap-1">

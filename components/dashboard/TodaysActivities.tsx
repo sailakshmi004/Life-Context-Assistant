@@ -3,6 +3,7 @@ import { Clock, ShieldAlert, Calendar, Plus, ShieldCheck, MapPin } from "lucide-
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { StatusMenu } from "@/components/activities/StatusMenu";
 import { Activity, ActivityStatus } from "@/types";
 import { formatTimeDisplay } from "@/lib/utils";
 import { ActivityListSkeleton } from "@/components/activities/ActivitySkeleton";
@@ -145,27 +146,12 @@ export function TodaysActivities({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 pt-1 sm:pt-0">
-                  {/* Status Dropdown */}
-                  <select
+                  <StatusMenu
                     value={activity.status}
-                    onChange={(e) =>
-                      onStatusChange?.(activity.id, e.target.value as ActivityStatus)
-                    }
-                    className={`rounded-lg border px-2 py-0.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-500 transition-colors ${
-                      activity.status === "completed"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : activity.status === "in_progress"
-                        ? "bg-sky-50 text-sky-700 border-sky-200"
-                        : activity.status === "cancelled"
-                        ? "bg-slate-100 text-slate-600 border-slate-200"
-                        : "bg-slate-50 text-slate-700 border-slate-200"
-                    }`}
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
+                    onChange={(status) => onStatusChange?.(activity.id, status)}
+                    disabled={!onStatusChange}
+                    activityTitle={activity.title}
+                  />
 
                   {/* Actions */}
                   {onEdit && (

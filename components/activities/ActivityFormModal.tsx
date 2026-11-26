@@ -11,13 +11,13 @@ import {
   CreateActivityInput,
   UpdateActivityInput,
 } from "@/types";
-import { VALID_STATUSES } from "@/lib/validations/activity";
 import {
   getRuleTypesForActivity,
   RULE_LABELS,
 } from "@/lib/rules/registry";
 import { CategoryPicker } from "./CategoryPicker";
 import { DurationPicker } from "./DurationPicker";
+import { StatusPicker } from "./StatusPicker";
 import {
   ActivityTemplate,
   ActivityTemplatePicker,
@@ -508,28 +508,12 @@ export function ActivityFormModal({
 
         {isEditing && (
           <div>
-            <label
-              htmlFor="activity-status"
-              className="block text-xs font-semibold text-slate-700"
-            >
+            <label className="block text-xs font-semibold text-slate-700">
               Status
             </label>
-            <select
-              id="activity-status"
-              value={status}
-              onChange={(event) =>
-                setStatus(event.target.value as ActivityStatus)
-              }
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              {VALID_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {value === "in_progress"
-                    ? "In Progress"
-                    : value.charAt(0).toUpperCase() + value.slice(1)}
-                </option>
-              ))}
-            </select>
+            <div className="mt-1.5">
+              <StatusPicker value={status} onChange={setStatus} />
+            </div>
           </div>
         )}
 
