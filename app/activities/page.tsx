@@ -270,7 +270,9 @@ export default function ActivitiesPage() {
         <Database className="h-4 w-4 text-brand-600 shrink-0" />
         <span>
           Backend:{" "}
-          {isLiveSupabase ? (
+          {isLoading ? (
+            <span className="font-medium text-slate-500">Connecting…</span>
+          ) : isLiveSupabase ? (
             <span className="font-semibold text-emerald-700">
               Supabase (Connected)
             </span>
@@ -328,8 +330,8 @@ export default function ActivitiesPage() {
               <CardTitle>Activities List</CardTitle>
             </div>
             <span className="text-xs font-semibold text-slate-500">
-              {visibleActivities.length}{" "}
-              {visibleActivities.length === 1 ? "item" : "items"}
+              {isLoading ? "…" : visibleActivities.length}{" "}
+              {!isLoading && (visibleActivities.length === 1 ? "item" : "items")}
             </span>
           </div>
           <CardDescription>

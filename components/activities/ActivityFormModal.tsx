@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import {
@@ -11,12 +11,30 @@ import {
   CreateActivityInput,
   UpdateActivityInput,
 } from "@/types";
-import { VALID_CATEGORIES, VALID_STATUSES } from "@/lib/validations/activity";
+import { VALID_STATUSES } from "@/lib/validations/activity";
 import {
   getRuleTypesForActivity,
   RULE_LABELS,
 } from "@/lib/rules/registry";
-import { Sparkles, Calendar, Clock, AlertCircle, MapPin } from "lucide-react";
+import { CategoryPicker } from "./CategoryPicker";
+import { DurationPicker } from "./DurationPicker";
+import {
+  ActivityTemplate,
+  ActivityTemplatePicker,
+} from "./ActivityTemplatePicker";
+import {
+  AlertCircle,
+  CalendarClock,
+  CheckCircle2,
+  MapPin,
+  Sparkles,
+} from "lucide-react";
+import {
+  formatDateTimeDisplay,
+  formatDuration,
+  formatTimeDisplay,
+  isToday,
+} from "@/lib/utils";
 
 const pad = (value: number) => value.toString().padStart(2, "0");
 
@@ -26,7 +44,6 @@ function toLocalInputValue(date: Date): string {
   )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/** Formats an ISO string for input[type="datetime-local"]. */
 function toDateTimeLocal(isoString?: string): string {
   if (!isoString) {
     const date = new Date();
@@ -49,6 +66,23 @@ function minutesBetween(start: string, end: string): number | null {
   const endDate = new Date(end);
   if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return null;
   return Math.round((endDate.getTime() - startDate.getTime()) / 60000);
+}
+
+function SectionLabel({
+  icon: Icon,
+  title,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Icon className="h-3.5 w-3.5 text-brand-600" />
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </h3>
+    </div>
+  );
 }
 
 export interface ActivityFormModalProps {
@@ -121,10 +155,15 @@ export function ActivityFormModal({
       newErrors.title = "Title cannot exceed 255 characters.";
     }
 
-    if (!durationMinutes || durationMinutes <= 0 || !Number.isInteger(Number(durationMinutes))) {
+    if (
+      !durationMinutes ||
+      durationMinutes <= 0 ||
+      !Number.isInteger(Number(durationMinutes))
+    ) {
       newErrors.durationMinutes = "Duration must be a positive integer.";
     } else if (durationMinutes > 1440) {
-      newErrors.durationMinutes = "Duration cannot exceed 1440 minutes (24 hours).";
+      newErrors.durationMinutes =
+        "Duration cannot exceed 1440 minutes (24 hours).";
     }
 
     if (!startTime) {
@@ -133,9 +172,7 @@ export function ActivityFormModal({
       newErrors.startTime = "End time is required.";
     } else if (minutesBetween(startTime, endTime) === null) {
       newErrors.startTime = "Start and end time must be valid.";
-    } else if (
-      (minutesBetween(startTime, endTime) as number) <= 0
-    ) {
+    } else if ((minutesBetween(startTime, endTime) as number) <= 0) {
       newErrors.startTime = "End time must be after start time.";
     }
 
@@ -151,7 +188,6 @@ export function ActivityFormModal({
     e.preventDefault();
     if (!validate()) return;
 
-    // Convert local datetime to ISO string
     let finalStartTime = startTime;
     const parsed = new Date(startTime);
     if (!isNaN(parsed.getTime())) {
@@ -170,289 +206,286 @@ export function ActivityFormModal({
     });
   };
 
+  const applyTemplate = (template: ActivityTemplate) => {
+    setTitle(template.title);
+    setDescription(template.description);
+    setCategory(template.category);
+    setDurationMinutes(template.durationMinutes);
+    setMonitoringEnabled(template.monitoringEnabled);
+    if (startTime) {
+      setEndTime(addMinutes(startTime, template.durationMinutes));
+    }
+    setErrors({});
+  };
+
+  const handleDurationChange = (minutes: number) => {
+    const next = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+    setDurationMinutes(next);
+    if (startTime && next > 0) {
+      setEndTime(addMinutes(startTime, next));
+    }
+    if (errors.durationMinutes) {
+      setErrors((prev) => ({ ...prev, durationMinutes: undefined }));
+    }
+  };
+
   const applicableRules = getRuleTypesForActivity({ title, category });
+
+  const startLabel = startTime
+    ? isToday(startTime)
+      ? `Today, ${formatTimeDisplay(startTime)}`
+      : formatDateTimeDisplay(startTime)
+    : "";
+  const endLabel = endTime
+    ? isToday(endTime)
+      ? formatTimeDisplay(endTime)
+      : formatDateTimeDisplay(endTime)
+    : "";
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={isLoading ? () => {} : onClose}
-      title={isEditing ? "Edit Activity" : "Create Context Activity"}
+      title={isEditing ? "Edit Activity" : "Add Activity"}
       description={
         isEditing
-          ? "Update details or status for this tracked activity in the database."
-          : "Add an activity. Awarely will monitor conditions during its scheduled window."
+          ? "Update the schedule, location, or status for this activity."
+          : "Schedule something and Awarely will check the conditions during its window."
       }
+      className="max-w-2xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         {serverError && (
-          <div className="flex items-center gap-2 rounded-lg bg-rose-50 p-3 text-xs text-rose-800 border border-rose-200">
+          <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
             <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
             <span>{serverError}</span>
           </div>
         )}
 
-        {/* Title */}
-        <div>
-          <label
-            htmlFor="activity-title"
-            className="block text-xs font-semibold text-slate-700"
-          >
-            Activity Title <span className="text-rose-500">*</span>
-          </label>
-          <input
-            id="activity-title"
-            type="text"
-            required
-            aria-invalid={Boolean(errors.title)}
-            aria-describedby={errors.title ? "activity-title-error" : undefined}
-            placeholder="e.g. Drying Clothes, Outdoor Run, Lawn Mowing"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              if (errors.title) setErrors((prev) => ({ ...prev, title: undefined }));
-            }}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-          />
-          {errors.title && (
-            <p id="activity-title-error" className="mt-1 text-xs text-rose-600">
-              {errors.title}
-            </p>
-          )}
-        </div>
+        {!isEditing && <ActivityTemplatePicker onSelect={applyTemplate} />}
 
-        {/* Description */}
-        <div>
-          <label
-            htmlFor="activity-description"
-            className="block text-xs font-semibold text-slate-700"
-          >
-            Description / Notes (Optional)
-          </label>
-          <textarea
-            id="activity-description"
-            rows={2}
-            placeholder="e.g. Hang washing on backyard line"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-          />
-        </div>
+        {/* Activity details */}
+        <section className="space-y-3">
+          <SectionLabel icon={Sparkles} title="Activity" />
 
-        {/* Location */}
-        <div>
-          <label
-            htmlFor="activity-location"
-            className="flex items-center gap-1.5 text-xs font-semibold text-slate-700"
-          >
-            <MapPin className="h-3.5 w-3.5 text-slate-400" />
-            Location (Optional)
-          </label>
-          <input
-            id="activity-location"
-            type="text"
-            aria-invalid={Boolean(errors.location)}
-            aria-describedby={
-              errors.location ? "activity-location-error" : undefined
-            }
-            placeholder="City, postcode, or lat,long — defaults to Settings"
-            value={location}
-            onChange={(e) => {
-              setLocation(e.target.value);
-              if (errors.location)
-                setErrors((prev) => ({ ...prev, location: undefined }));
-            }}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-          />
-          {errors.location && (
-            <p
-              id="activity-location-error"
-              className="mt-1 text-xs text-rose-600"
-            >
-              {errors.location}
-            </p>
-          )}
-        </div>
-
-        {/* Category & Status Grid */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label
-              htmlFor="activity-category"
+              htmlFor="activity-title"
               className="block text-xs font-semibold text-slate-700"
             >
+              Title <span className="text-rose-500">*</span>
+            </label>
+            <input
+              id="activity-title"
+              type="text"
+              required
+              autoFocus
+              aria-invalid={Boolean(errors.title)}
+              aria-describedby={
+                errors.title ? "activity-title-error" : undefined
+              }
+              placeholder="e.g. Drying Clothes, Outdoor Run, Water Plants"
+              value={title}
+              onChange={(event) => {
+                setTitle(event.target.value);
+                if (errors.title)
+                  setErrors((prev) => ({ ...prev, title: undefined }));
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+            {errors.title && (
+              <p id="activity-title-error" className="mt-1 text-xs text-rose-600">
+                {errors.title}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="activity-description"
+              className="block text-xs font-semibold text-slate-700"
+            >
+              Notes <span className="text-slate-400">(optional)</span>
+            </label>
+            <textarea
+              id="activity-description"
+              rows={2}
+              placeholder="Anything useful to remember about this task"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">
               Category <span className="text-rose-500">*</span>
             </label>
-            <select
-              id="activity-category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value as ActivityCategory)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              {VALID_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat} className="capitalize">
-                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                </option>
-              ))}
-            </select>
+            <div className="mt-1.5">
+              <CategoryPicker value={category} onChange={setCategory} />
+            </div>
           </div>
 
           <div>
             <label
-              htmlFor="activity-status"
-              className="block text-xs font-semibold text-slate-700"
+              htmlFor="activity-location"
+              className="flex items-center gap-1.5 text-xs font-semibold text-slate-700"
             >
-              Status
+              <MapPin className="h-3.5 w-3.5 text-slate-400" />
+              Location <span className="text-slate-400">(optional)</span>
             </label>
-            <select
-              id="activity-status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as ActivityStatus)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              {VALID_STATUSES.map((st) => (
-                <option key={st} value={st}>
-                  {st === "in_progress"
-                    ? "In Progress"
-                    : st.charAt(0).toUpperCase() + st.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Start / End / Duration Grid */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div>
-            <label
-              htmlFor="activity-start"
-              className="block text-xs font-semibold text-slate-700"
-            >
-              Start Date & Time <span className="text-rose-500">*</span>
-            </label>
-            <input
-              id="activity-start"
-              type="datetime-local"
-              required
-              aria-invalid={Boolean(errors.startTime)}
-              aria-describedby={
-                errors.startTime ? "activity-start-error" : undefined
-              }
-              value={startTime}
-              onChange={(e) => {
-                const value = e.target.value;
-                setStartTime(value);
-                if (value) {
-                  setEndTime(
-                    addMinutes(
-                      value,
-                      durationMinutes > 0 ? durationMinutes : 60
-                    )
-                  );
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                id="activity-location"
+                type="text"
+                aria-invalid={Boolean(errors.location)}
+                aria-describedby={
+                  errors.location ? "activity-location-error" : undefined
                 }
-                if (errors.startTime)
-                  setErrors((prev) => ({ ...prev, startTime: undefined }));
-              }}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-            {errors.startTime && (
-              <p id="activity-start-error" className="mt-1 text-xs text-rose-600">
-                {errors.startTime}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="activity-end"
-              className="block text-xs font-semibold text-slate-700"
-            >
-              End Date & Time <span className="text-rose-500">*</span>
-            </label>
-            <input
-              id="activity-end"
-              type="datetime-local"
-              required
-              aria-invalid={Boolean(errors.startTime)}
-              aria-describedby={
-                errors.startTime ? "activity-start-error" : undefined
-              }
-              value={endTime}
-              onChange={(e) => {
-                const value = e.target.value;
-                setEndTime(value);
-                const diff = minutesBetween(startTime, value);
-                if (diff !== null && diff > 0) {
-                  setDurationMinutes(diff);
-                }
-                if (errors.startTime)
-                  setErrors((prev) => ({ ...prev, startTime: undefined }));
-              }}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="activity-duration"
-              className="block text-xs font-semibold text-slate-700"
-            >
-              Duration (Minutes) <span className="text-rose-500">*</span>
-            </label>
-            <input
-              id="activity-duration"
-              type="number"
-              min="5"
-              step="5"
-              required
-              aria-invalid={Boolean(errors.durationMinutes)}
-              aria-describedby={
-                errors.durationMinutes ? "activity-duration-error" : undefined
-              }
-              value={durationMinutes}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                setDurationMinutes(value);
-                if (startTime && Number.isFinite(value) && value > 0) {
-                  setEndTime(addMinutes(startTime, value));
-                }
-                if (errors.durationMinutes)
-                  setErrors((prev) => ({
-                    ...prev,
-                    durationMinutes: undefined,
-                  }));
-              }}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-            {errors.durationMinutes && (
+                placeholder="City, postcode, or lat,long"
+                value={location}
+                onChange={(event) => {
+                  setLocation(event.target.value);
+                  if (errors.location)
+                    setErrors((prev) => ({ ...prev, location: undefined }));
+                }}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+              {location && (
+                <button
+                  type="button"
+                  onClick={() => setLocation("")}
+                  className="shrink-0 text-[11px] font-medium text-slate-500 hover:text-slate-800"
+                >
+                  Use default
+                </button>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Leave blank to use the default location from Settings.
+            </p>
+            {errors.location && (
               <p
-                id="activity-duration-error"
+                id="activity-location-error"
                 className="mt-1 text-xs text-rose-600"
               >
-                {errors.durationMinutes}
+                {errors.location}
               </p>
             )}
           </div>
-        </div>
+        </section>
 
-        {/* Monitoring Enabled Toggle */}
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <label className="flex items-start gap-3 cursor-pointer">
+        {/* Schedule */}
+        <section className="space-y-3 border-t border-slate-100 pt-4">
+          <SectionLabel icon={CalendarClock} title="Schedule" />
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="activity-start"
+                className="block text-xs font-semibold text-slate-700"
+              >
+                Starts <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="activity-start"
+                type="datetime-local"
+                required
+                aria-invalid={Boolean(errors.startTime)}
+                aria-describedby={
+                  errors.startTime ? "activity-start-error" : undefined
+                }
+                value={startTime}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setStartTime(value);
+                  if (value) {
+                    setEndTime(
+                      addMinutes(
+                        value,
+                        durationMinutes > 0 ? durationMinutes : 60
+                      )
+                    );
+                  }
+                  if (errors.startTime)
+                    setErrors((prev) => ({ ...prev, startTime: undefined }));
+                }}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+              {errors.startTime && (
+                <p id="activity-start-error" className="mt-1 text-xs text-rose-600">
+                  {errors.startTime}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="activity-end"
+                className="block text-xs font-semibold text-slate-700"
+              >
+                Ends <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="activity-end"
+                type="datetime-local"
+                required
+                aria-invalid={Boolean(errors.startTime)}
+                aria-describedby={
+                  errors.startTime ? "activity-start-error" : undefined
+                }
+                value={endTime}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setEndTime(value);
+                  const diff = minutesBetween(startTime, value);
+                  if (diff !== null && diff > 0) setDurationMinutes(diff);
+                  if (errors.startTime)
+                    setErrors((prev) => ({ ...prev, startTime: undefined }));
+                }}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+
+          <DurationPicker
+            value={durationMinutes}
+            onChange={handleDurationChange}
+            error={errors.durationMinutes}
+          />
+
+          <div className="flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+            <CalendarClock className="h-4 w-4 shrink-0 text-slate-400" />
+            <span>
+              {startLabel && endLabel
+                ? `${startLabel} → ${endLabel} · ${formatDuration(
+                    durationMinutes
+                  )}`
+                : "Choose a start and end time"}
+            </span>
+          </div>
+        </section>
+
+        {/* Monitoring */}
+        <section className="border-t border-slate-100 pt-4">
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <input
               type="checkbox"
               checked={monitoringEnabled}
-              onChange={(e) => setMonitoringEnabled(e.target.checked)}
+              onChange={(event) => setMonitoringEnabled(event.target.checked)}
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
             />
-            <div>
+            <div className="min-w-0">
               <span className="text-xs font-semibold text-slate-800">
-                Enable Context & Weather Monitoring
+                Weather monitoring
               </span>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                When enabled, Awarely cross-references external forecasts with this activity’s time slot.
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                Check the forecast during this activity&apos;s window and create
+                alerts when conditions conflict.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <span className="text-[11px] font-medium text-slate-500">
-                  Weather checks:
+                  Checks:
                 </span>
                 {applicableRules.length > 0 ? (
                   applicableRules.map((rule) => (
@@ -471,10 +504,36 @@ export function ActivityFormModal({
               </div>
             </div>
           </label>
-        </div>
+        </section>
 
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        {isEditing && (
+          <div>
+            <label
+              htmlFor="activity-status"
+              className="block text-xs font-semibold text-slate-700"
+            >
+              Status
+            </label>
+            <select
+              id="activity-status"
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as ActivityStatus)
+              }
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 capitalize focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              {VALID_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {value === "in_progress"
+                    ? "In Progress"
+                    : value.charAt(0).toUpperCase() + value.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="sticky bottom-0 -mx-6 flex items-center justify-end gap-2 border-t border-slate-100 bg-white/95 px-6 py-4 backdrop-blur">
           <Button
             type="button"
             variant="outline"
@@ -489,12 +548,19 @@ export function ActivityFormModal({
             variant="primary"
             size="sm"
             disabled={isLoading}
+            icon={
+              isEditing ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )
+            }
           >
             {isLoading
-              ? "Saving..."
+              ? "Saving…"
               : isEditing
-              ? "Save Changes"
-              : "Create Activity"}
+              ? "Save changes"
+              : "Create activity"}
           </Button>
         </div>
       </form>
