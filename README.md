@@ -11,6 +11,7 @@ indoor drying rack — in-app and, optionally, as a browser push notification.
 
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** — Docker/Caddy VPS runbook
 - **[docs/DEPLOYMENT_NATIVE.md](docs/DEPLOYMENT_NATIVE.md)** — Nginx + PM2 native VPS guide
+- **[docs/DEPLOY_WALKTHROUGH.md](docs/DEPLOY_WALKTHROUGH.md)** — beginner walkthrough: what was done, in order, and why
 - **[docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md)** — go-live checklist
 - **[docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)** — 5-minute demo and interview talking points
 - **[docs/PROJECT_AUDIT.md](docs/PROJECT_AUDIT.md)** — architecture audit and milestone history
