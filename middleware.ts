@@ -23,6 +23,23 @@ const PUBLIC_PATHS = new Set([
   "/favicon.ico",
 ]);
 
+function getRequestOrigin(request: NextRequest): string {
+  const forwardedProto = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim();
+  const forwardedHost = request.headers
+    .get("x-forwarded-host")
+    ?.split(",")[0]
+    ?.trim();
+  const host = forwardedHost || request.headers.get("host");
+
+  if (host) {
+    return `${forwardedProto || "http"}://${host}`;
+  }
+  return request.nextUrl.origin;
+}
+
 async function isCronRequest(request: NextRequest): Promise<boolean> {
   if (request.nextUrl.pathname !== "/api/notifications/sync") return false;
   const header = request.headers.get("x-cron-secret");
@@ -33,14 +50,13 @@ async function isCronRequest(request: NextRequest): Promise<boolean> {
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const authenticated = await verifySessionToken(
-    request.cookies.get(SESSION_COOKIE_NAME)?.value,
-    getSessionSecret()
-  );
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const secret = getSessionSecret();
+  const authenticated = await verifySessionToken(token, secret);
 
   if (authenticated) {
     if (pathname === "/unlock") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return NextResponse.redirect(new URL("/dashboard", getRequestOrigin(request)));
     }
     return NextResponse.next();
   }
@@ -56,7 +72,7 @@ export async function middleware(request: NextRequest) {
     );
   }
 
-  const unlockUrl = new URL("/unlock", request.url);
+  const unlockUrl = new URL("/unlock", getRequestOrigin(request));
   const nextPath = `${pathname}${search}`;
   if (nextPath && nextPath !== "/" && !nextPath.startsWith("//")) {
     unlockUrl.searchParams.set("next", nextPath);

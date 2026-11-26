@@ -18,6 +18,9 @@ CRON_SECRET="${CRON_SECRET#\"}"
 CRON_SECRET="${CRON_SECRET%\'}"
 CRON_SECRET="${CRON_SECRET#\'}"
 
+PORT="$(sed -n 's/^PORT=//p' "$ENV_FILE" | head -n 1 | tr -d '\r')"
+PORT="${PORT:-3000}"
+
 if [ -z "$CRON_SECRET" ]; then
   echo "CRON_SECRET is missing from $ENV_FILE" >&2
   exit 1
@@ -30,6 +33,6 @@ curl --max-time 120 \
   -fsS \
   -X POST \
   -H "x-cron-secret: ${CRON_SECRET}" \
-  "http://127.0.0.1:3000/api/notifications/sync" >/dev/null
+  "http://127.0.0.1:${PORT}/api/notifications/sync" >/dev/null
 
 echo "sync ok $(date -u +%FT%TZ)"

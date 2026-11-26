@@ -45,7 +45,7 @@ export async function verifySessionToken(
     return await crypto.subtle.verify(
       "HMAC",
       key,
-      signature.buffer as ArrayBuffer,
+      signature as unknown as BufferSource,
       encoder.encode(expiryPart)
     );
   } catch {

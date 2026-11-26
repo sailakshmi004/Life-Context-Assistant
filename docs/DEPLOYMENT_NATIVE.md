@@ -114,6 +114,17 @@ VAPID_SUBJECT=mailto:you@example.com
 `SITE_ADDRESS`, `HTTP_PORT`, `HTTPS_PORT`, and `APP_PORT` are Docker/Caddy
 settings. In native mode, Nginx and PM2 own the ports, so you can ignore them.
 
+Add/confirm:
+
+```env
+# Native PM2
+PORT=3000
+HOSTNAME=127.0.0.1
+```
+
+If port 3000 is already used on the server, choose a free loopback port such as
+`PORT=3120`, and set the same port in `proxy_pass` in the Nginx site config.
+
 Keep `DATABASE_URL` empty unless you plan to run migrations from the server.
 
 ---
@@ -153,6 +164,12 @@ Test locally on the server:
 ```bash
 curl -fsS http://127.0.0.1:3000/api/health
 # {"status":"ok","database":"connected",...}
+```
+
+On a shared VPS, use the `PORT` you chose in `.env` (for example `3120`):
+
+```bash
+curl -fsS http://127.0.0.1:3120/api/health
 ```
 
 Save the process list and enable boot startup:
@@ -259,7 +276,8 @@ tail -n 5 /var/log/awarely/sync.log
 ```
 
 If the script fails, check that `CRON_SECRET` exists in `/opt/awarely/.env` and
-that the app is reachable on `127.0.0.1:3000`.
+that the app is reachable on the `PORT` in `.env` (default `3000`). The script
+reads `PORT` automatically.
 
 Optional log rotation:
 

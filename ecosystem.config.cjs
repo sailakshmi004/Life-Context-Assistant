@@ -1,12 +1,32 @@
+const fs = require("node:fs");
+const path = require("node:path");
+
 /**
- * PM2 process definition for native VPS deployment (Nginx + Node).
- *
- * Run from the repository root:
- *   pm2 start ecosystem.config.cjs
- *
- * Keep instances at 1: the login rate limiter and notification sync lock are
- * process-local. Nginx is the public entry point; the app listens on loopback.
+ * Loads the app's .env without printing secrets. PM2 passes these values to the
+ * Next.js process; PORT can be changed per server so Awarely can coexist with
+ * other apps (the default 3000 is often already taken on shared VPSs).
  */
+function loadEnv(file) {
+  const values = {};
+  if (!fs.existsSync(file)) return values;
+
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!match) continue;
+    let value = match[2];
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    values[match[1]] = value;
+  }
+  return values;
+}
+
+const env = loadEnv(path.join(__dirname, ".env"));
+
 module.exports = {
   apps: [
     {
@@ -14,7 +34,6 @@ module.exports = {
       cwd: __dirname,
       script: ".next/standalone/server.js",
       interpreter: "node",
-      interpreter_args: "--env-file=.env",
       instances: 1,
       exec_mode: "fork",
       autorestart: true,
@@ -26,8 +45,9 @@ module.exports = {
       merge_logs: true,
       env: {
         NODE_ENV: "production",
-        PORT: "3000",
-        HOSTNAME: "127.0.0.1",
+        PORT: env.PORT || "3000",
+        HOSTNAME: env.HOSTNAME || "127.0.0.1",
+        ...env,
       },
     },
   ],
