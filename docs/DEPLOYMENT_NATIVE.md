@@ -239,6 +239,60 @@ Renewal is automatic; verify with:
 sudo certbot renew --dry-run
 ```
 
+### Moving to a custom domain
+
+The `sslip.io` hostname is only a placeholder. To attach a real domain that you
+own:
+
+1. **At your registrar**, point the name at this server:
+
+   ```
+   A    @      <SERVER_PUBLIC_IP>
+   A    www    <SERVER_PUBLIC_IP>
+   ```
+
+2. **Confirm DNS** before touching Nginx:
+
+   ```bash
+   dig +short awarely.example.com     # must print <SERVER_PUBLIC_IP>
+   ```
+
+3. **Run the helper** on the server:
+
+   ```bash
+   sudo DOMAIN=awarely.example.com /opt/awarely/scripts/enable-domain.sh
+   ```
+
+   It will:
+
+   - refuse to run unless DNS already resolves to this machine,
+   - back up the Nginx site file,
+   - add the domain (and `www` when it resolves) to every `server_name`,
+   - run `nginx -t` and restore the backup if validation fails,
+   - issue/renew the certificate with Certbot and force HTTPS,
+   - check `https://<domain>/api/health`.
+
+   Skip the certificate step with `SKIP_CERT=1` if you only want the Nginx change.
+
+4. **Re-enable browser push.** Push subscriptions are bound to the origin, so
+   open the new domain → Settings → **Enable** → **Send test**.
+
+The old `sslip.io` hostname keeps working in the same server block. To make it
+redirect to the new domain instead, replace the extra `server_name` entry with a
+dedicated redirect block:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name awarely.<SERVER_PUBLIC_IP>.sslip.io;
+    # reuse the same certificate lines Certbot wrote
+    return 301 https://awarely.example.com$request_uri;
+}
+```
+
+No application code changes are required: the app derives its public URL from
+the request plus Nginx's `X-Forwarded-*` headers.
+
 ### Firewall
 
 ```bash
