@@ -111,6 +111,9 @@ deployment, and test coverage.
 > - Added `docs/PRODUCTION_CHECKLIST.md` (go-live, security, rollback).
 > - Final README: documentation index, environment table, testing matrix,
 >   troubleshooting, deployment modes, and roadmap.
+> - Added a native VPS deployment path (Node 20 + PM2 + Nginx + Certbot + cron)
+>   with `ecosystem.config.cjs`, Nginx config, standalone build script, and
+>   scheduler script, while keeping the Docker path intact.
 > - Final verification: 66/66 tests, lint, type-check, production build, compose
 >   validation, CSP header, cron auth, and protected APIs.
 > - Docker image build remains CI-only in this environment.

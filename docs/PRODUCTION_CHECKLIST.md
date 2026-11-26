@@ -72,6 +72,18 @@ docker compose up -d --build app scheduler
 # existing proxy → http://127.0.0.1:$APP_PORT
 ```
 
+Native mode (Nginx + PM2):
+
+```bash
+npm ci
+npm run build:standalone
+pm2 start ecosystem.config.cjs
+pm2 save
+# Nginx proxies to 127.0.0.1:3000; cron runs scripts/run-sync.sh every 10 min
+```
+
+See `docs/DEPLOYMENT_NATIVE.md` for the full native runbook.
+
 - [ ] `docker compose ps` shows app healthy
 - [ ] Caddy certificate issued (direct mode)
 - [ ] `curl -fsS https://<host>/api/health` returns `database: connected`

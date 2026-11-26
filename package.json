@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:standalone": "next build && node scripts/prepare-standalone.mjs",
+    "prepare:standalone": "node scripts/prepare-standalone.mjs",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",

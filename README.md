@@ -9,7 +9,8 @@ indoor drying rack — in-app and, optionally, as a browser push notification.
 
 ## Documentation
 
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** — Hostinger/VPS runbook, direct and shared-proxy modes
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** — Docker/Caddy VPS runbook
+- **[docs/DEPLOYMENT_NATIVE.md](docs/DEPLOYMENT_NATIVE.md)** — Nginx + PM2 native VPS guide
 - **[docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md)** — go-live checklist
 - **[docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)** — 5-minute demo and interview talking points
 - **[docs/PROJECT_AUDIT.md](docs/PROJECT_AUDIT.md)** — architecture audit and milestone history
@@ -88,7 +89,12 @@ supabase/migrations/       Additive migration for existing databases
 Dockerfile                 Multi-stage standalone build
 docker-compose.yml         app + caddy + scheduler
 Caddyfile                  Reverse proxy / automatic TLS
-DEPLOYMENT.md              Step-by-step VPS runbook
+ecosystem.config.cjs       PM2 process definition (native deployment)
+deploy/nginx/awarely.conf  Nginx site config (native deployment)
+scripts/prepare-standalone.mjs  Copies public/static into standalone
+scripts/run-sync.sh        Cron-driven notification sync
+docs/DEPLOYMENT_NATIVE.md  Nginx + PM2 deployment guide
+DEPLOYMENT.md              Docker/Caddy VPS runbook
 ```
 
 ---
@@ -109,6 +115,7 @@ passcode defaults to **`awarely`**; production fails closed when it is missing.
 ```bash
 npm run dev            # Next.js dev server
 npm run build          # production build (standalone output)
+npm run build:standalone # build + copy public/static into .next/standalone
 npm start              # run the production build
 npm run lint           # ESLint
 npm run type-check     # tsc --noEmit
@@ -235,6 +242,10 @@ Caddy obtains HTTPS automatically in direct mode. Without a domain, use
 `awarely.<YOUR_SERVER_IP>.sslip.io`. If the VPS already runs a reverse proxy,
 use shared-proxy mode: set `APP_PORT` and run
 `docker compose up -d --build app scheduler`; see `DEPLOYMENT.md`.
+
+**Prefer no Docker?** Use the native guide:
+[docs/DEPLOYMENT_NATIVE.md](docs/DEPLOYMENT_NATIVE.md). It uses Node 20 + PM2 +
+Nginx + Certbot + cron, with the same `.env` and Supabase database.
 
 ---
 
